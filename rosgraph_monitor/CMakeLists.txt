@@ -82,4 +82,22 @@ if(BUILD_TESTING)
     ${PROJECT_NAME})
 endif()
 
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+install(
+  TARGETS
+    ${PROJECT_NAME}
+    ${PROJECT_NAME}_generated_parameters
+    ${PROJECT_NAME}_nodelib
+  EXPORT ${PROJECT_NAME}Targets
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
+
 ament_package()

@@ -12,6 +12,7 @@
 
   <depend>diagnostic_msgs</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
   <depend>rosgraph_monitor_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>

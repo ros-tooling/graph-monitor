@@ -51,7 +51,7 @@ Node::Node(const rclcpp::NodeOptions & options)
       std::bind(&Node::publish_diagnostics, this))),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
-      "/health/topic_statistics",
+      "/topic_statistics",
       rclcpp::QoS{10},
       std::bind(&Node::on_topic_statistics, this, std::placeholders::_1))),
   pub_diagnostics_(

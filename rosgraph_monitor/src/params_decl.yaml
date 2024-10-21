@@ -1,4 +1,9 @@
 rosgraph_monitor:
+  diagnostics_publish_period_ms:
+    type: int
+    default_value: 500
+    read_only: true
+    description: "Period in milliseconds between each publishing of the graph diagnostics."
   graph_monitor:
     nodes:
       ignore_prefixes:

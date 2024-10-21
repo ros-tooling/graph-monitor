@@ -69,7 +69,7 @@ struct GraphMonitorConfiguration
   struct ContinuityChecks
   {
     // If set, don't perform any continuity checks
-    bool disable = false;
+    bool enable = true;
     // These nodes don't count for subscriptions when reporting discontinuity
     std::unordered_set<std::string> ignore_subscriber_nodes;
     // Any topics of these types will be ignored entirely for continuity checks

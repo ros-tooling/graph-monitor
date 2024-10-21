@@ -318,7 +318,7 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
   }
 
   // Super basic graph continuity test - does not yet account for QoS mismatch
-  if (!config_.continuity.disable) {
+  if (config_.continuity.enable) {
     for (auto it = topic_endpoint_counts_.begin(); it != topic_endpoint_counts_.end(); ) {
       auto & [topic_name, counts] = *it;
       // Check counts to see if any pubs or subs don't have matches

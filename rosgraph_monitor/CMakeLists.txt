@@ -29,6 +29,7 @@ find_package(generate_parameter_library REQUIRED)
 
 find_package(diagnostic_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 
 # Library
@@ -50,19 +51,26 @@ generate_parameter_library(${PROJECT_NAME}_generated_parameters
 )
 
 # Node
-# TODO(ek) node
-# add_library(${PROJECT_NAME}_nodelib SHARED
-#   # TODO(ek) graph analyzer (use diags properly?)
-#   # src/graph_analyzer.cpp
-#   src/node.cpp
-# )
-# target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
-#   ${PROJECT_NAME}_generated_parameters)
+add_library(${PROJECT_NAME}_nodelib SHARED
+  # TODO(ek) graph analyzer (use diags properly?)
+  # src/graph_analyzer.cpp
+  src/node.cpp
+)
+target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
+target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
+  ${PROJECT_NAME}
+  ${PROJECT_NAME}_generated_parameters
+  rclcpp_components::component
+  ${diagnostic_msgs_TARGETS}
+  ${rosgraph_monitor_msgs_TARGETS}
+)
 
-# rclcpp_components_register_node(${PROJECT_NAME}_nodelib
-#   PLUGIN "bonsai_health::HealthMonitorNode"
-#   EXECUTABLE rosgraph_monitor_node
-# )
+rclcpp_components_register_node(${PROJECT_NAME}_nodelib
+  PLUGIN "rosgraph_monitor::Node"
+  EXECUTABLE ${PROJECT_NAME}_node
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

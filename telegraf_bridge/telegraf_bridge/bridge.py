@@ -82,9 +82,12 @@ class TelegrafBridgeNode(Node):
                 tags=measurement.tags,
                 fields=measurement.fields,
             )
-            self.sock.sendto(
-                msg.encode(), (self.params.telegraf_uri, self.params.telegraf_port)
-            )
+            try:
+                self.sock.sendto(
+                    msg.encode(),
+                    (self.params.telegraf_uri, self.params.telegraf_port))
+            except socket.gaierror as e:
+                self.get_logger().error(f'Failed to send to Telegraf: {e}')
 
     def destroy_node(self):
         for collector in self.collectors:

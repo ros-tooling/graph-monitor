@@ -1,0 +1,61 @@
+rosgraph_monitor:
+  graph_monitor:
+    nodes:
+      ignore_prefixes:
+        type: string_array
+        description: If node FQN starts with any of these prefixes, ignore completely for graph analysis
+        default_value:
+          - /_ros2cli_  # ros2cli ephemeral nodes
+          - /dummy  # from foxglove_bridge
+          - /launch_ros_  # helpers for lifecycle nodes in launch
+          - /transform_listener_impl_  # ephemeral nodes created by TF
+      warn_only_prefixes:
+        type: string_array
+        description: If node FQN starts with any of these prefixes, downgrade ERROR to WARN when missing
+        default_value: []
+    continuity:
+      enable:
+        type: bool
+        description: Set to false to disable continuity checking (maybe you have a ton of debug topics?)
+        default_value: true
+      ignore_subscriber_nodes:
+        type: string_array
+        description: For continuity checking, pretend these nodes are not subscribing to any topics
+        default_value:
+          - /rosbag2_recorder
+          - /foxglove_bridge
+      ignore_topic_types:
+        type: string_array
+        description: Never report discontinuities on topics with these types - useful for viz/debug messages
+        default_value:
+          - foxglove_msgs/msg/ImageAnnotations
+          - foxglove_msgs/msg/SceneUpdate
+          - visualization_msgs/msg/Marker
+          - visualization_msgs/msg/MarkerArray
+      ignore_topic_names:
+        type: string_array
+        description: Never report discontinuities on topics with these exact names
+        default_value:
+          - /rosout
+    topic_statistics:
+      deadline_allowed_error:
+        type: double
+        description: Multiplier for the deadline period, if period falls within this error bound it is considered correct
+        default_value: 0.1
+      stale_timeout_ms:
+        type: int
+        description: Maximum period to receive updated statistics for a topic before an error is raised that it is missing
+        default_value: 3000
+  graph_analyzer:
+    mandatory_frequency_topics:
+      type: string_array
+      description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.
+      default_value: []
+    ignore_deadline_topics:
+      type: string_array
+      description: Topics with a deadline whose frequency should not be considered for health outcomes (escape hatch for known bad design/implementation)
+      default_value: []
+    all_nodes_required:
+      type: bool
+      description: Whether it should be considered an error for any node to be reported as missing from the monitor
+      default_value: true

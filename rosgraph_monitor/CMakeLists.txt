@@ -13,58 +13,65 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.8)
-project(rmw_stats_shim)
+project(rosgraph_monitor)
 
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic -Werror=switch)
   add_link_options("-Wl,--no-undefined")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 
-find_package(rcpputils REQUIRED)
-find_package(rmw REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
-find_package(rosidl_runtime_cpp REQUIRED)
-find_package(rosidl_typesupport_cpp REQUIRED)
 
+# Library
 add_library(${PROJECT_NAME} SHARED
-  src/shim.cpp
-  src/stat_collector.cpp
-  src/timer.cpp
+  src/event.cpp
+  src/monitor.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
 target_link_libraries(${PROJECT_NAME} PUBLIC
-  rcpputils::rcpputils
-  rmw::rmw
-  rosidl_runtime_cpp::rosidl_runtime_cpp
-  rosidl_typesupport_cpp::rosidl_typesupport_cpp
+  rclcpp::rclcpp
+  ${diagnostic_msgs_TARGETS}
   ${rosgraph_monitor_msgs_TARGETS}
 )
+
+generate_parameter_library(${PROJECT_NAME}_generated_parameters
+  src/params_decl.yaml
+)
+
+# Node
+# TODO(ek) node
+# add_library(${PROJECT_NAME}_nodelib SHARED
+#   # TODO(ek) graph analyzer (use diags properly?)
+#   # src/graph_analyzer.cpp
+#   src/node.cpp
+# )
+# target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
+#   ${PROJECT_NAME}_generated_parameters)
+
+# rclcpp_components_register_node(${PROJECT_NAME}_nodelib
+#   PLUGIN "bonsai_health::HealthMonitorNode"
+#   EXECUTABLE rosgraph_monitor_node
+# )
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
-endif()
 
-ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
-install(
-  TARGETS ${PROJECT_NAME}
-  EXPORT ${PROJECT_NAME}Targets
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
+  find_package(ament_cmake_gmock REQUIRED)
+  ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
+  target_link_libraries(test_graph_monitor
+    ${PROJECT_NAME})
+endif()
 
 ament_package()

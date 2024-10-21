@@ -1,0 +1,16 @@
+telegraf_bridge:
+  telegraf_uri:
+    type: string
+    description: URI of Telegraf instance
+    default_value: "127.0.0.1"
+    read_only: true
+  telegraf_port:
+    type: int
+    description: Port for Telegraf UDP input
+    default_value: 8094
+    read_only: true
+  publish_interval_s:
+    type: double
+    description: How frequently to send data to Telegraf, in seconds
+    default_value: 1.0
+    read_only: true

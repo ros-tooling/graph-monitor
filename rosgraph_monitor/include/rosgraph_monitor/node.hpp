@@ -18,10 +18,13 @@
 #include <memory>
 #include <vector>
 
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
+#include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "rclcpp/node.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor_generated_parameters.hpp"
+#include "rosgraph_monitor/graph_analyzer.hpp"
 #include "rosgraph_monitor/monitor.hpp"
 
 namespace rosgraph_monitor
@@ -44,11 +47,14 @@ protected:
   rosgraph_monitor::Params params_;
 
   RosGraphMonitor graph_monitor_;
+  GraphAnalyzer graph_analyzer_;
 
   rclcpp::TimerBase::SharedPtr timer_publish_report_;
   rclcpp::Subscription<rosgraph_monitor_msgs::msg::TopicStatistics>::SharedPtr
     sub_topic_statistics_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostic_agg_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticStatus>::SharedPtr pub_diagnostic_toplevel_;
 };
 
 }  // namespace rosgraph_monitor

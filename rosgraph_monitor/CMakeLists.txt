@@ -27,6 +27,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 
+find_package(diagnostic_aggregator REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -52,8 +53,7 @@ generate_parameter_library(${PROJECT_NAME}_generated_parameters
 
 # Node
 add_library(${PROJECT_NAME}_nodelib SHARED
-  # TODO(ek) graph analyzer (use diags properly?)
-  # src/graph_analyzer.cpp
+  src/graph_analyzer.cpp
   src/node.cpp
 )
 target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
@@ -62,6 +62,7 @@ target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
 target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
   ${PROJECT_NAME}
   ${PROJECT_NAME}_generated_parameters
+  diagnostic_aggregator::diagnostic_aggregator
   rclcpp_components::component
   ${diagnostic_msgs_TARGETS}
   ${rosgraph_monitor_msgs_TARGETS}

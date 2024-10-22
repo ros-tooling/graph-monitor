@@ -58,6 +58,8 @@ std::string gid_to_str(const RosRmwGid & gid);
 
 struct GraphMonitorConfiguration
 {
+  std::string diagnostic_namespace{"Rosgraph"};
+
   struct NodeChecks
   {
     // Matching nodes will not be considered in any graph analysis

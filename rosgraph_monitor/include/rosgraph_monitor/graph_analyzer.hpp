@@ -72,7 +72,7 @@ protected:
 
   // Internal derived configuration
   std::string path_;
-  std::string graph_diagnostic_prefix_{"/health/health_monitor::Graph::"};
+  std::string graph_diagnostic_prefix_;
   std::string pub_freq_diagnostic_prefix_;
   std::string node_diagnostic_prefix_;
   std::string name_match_regex_text_;

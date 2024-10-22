@@ -356,13 +356,13 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
           statusMsg(
             DiagnosticStatus::WARN,
             "Optional node missing: " + node_name,
-            "Graph::Node::" + node_name));
+            "Node::" + node_name));
       } else {
         msg->status.push_back(
           statusMsg(
             DiagnosticStatus::ERROR,
             "Required node missing: " + node_name,
-            "Graph::Node::" + node_name));
+            "Node::" + node_name));
       }
     }
   }
@@ -371,7 +371,7 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
       statusMsg(
         DiagnosticStatus::OK,
         "Node OK: " + node_name,
-        "Graph::Node::" + node_name));
+        "Node::" + node_name));
   }
 
   // Continuity
@@ -381,14 +381,14 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
         statusMsg(
           DiagnosticStatus::OK,
           "Dead sink: cleared. Topic now has publisher(s)",
-          "Graph::Continuity::" + topic_name));
+          "Continuity::" + topic_name));
     }
     if (counts.subs > 0 && pubs_with_no_subs_.erase(topic_name) > 0) {
       msg->status.push_back(
         statusMsg(
           DiagnosticStatus::OK,
           "Leaf topic: cleared. Topic now has subscriber(s)",
-          "Graph::Continuity::" + topic_name));
+          "Continuity::" + topic_name));
     }
   }
   for (const auto & topic_name : pubs_with_no_subs_) {
@@ -396,14 +396,14 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
       statusMsg(
         DiagnosticStatus::WARN,
         "Leaf topic (No subscriptions)",
-        "Graph::Continuity::" + topic_name));
+        "Continuity::" + topic_name));
   }
   for (const auto & topic_name : subs_with_no_pubs_) {
     msg->status.push_back(
       statusMsg(
         DiagnosticStatus::WARN,
         "Dead sink (No publishers)",
-        "Graph::Continuity::" + topic_name));
+        "Continuity::" + topic_name));
   }
 
   // Frequency
@@ -414,7 +414,7 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
 
   for (const auto & [gid, tracking] : publishers_) {
     auto deadline = tracking.info.qos_profile().deadline();
-    const std::string subname = "Graph::PublishFrequency::" + tracking.topic_name;
+    const std::string subname = "PublishFrequency::" + tracking.topic_name;
     bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
     if (deadline_not_set(deadline)) {
       // No deadline, don't care
@@ -444,7 +444,7 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
   }
   for (const auto & [gid, tracking] : subscriptions_) {
     auto deadline = tracking.info.qos_profile().deadline();
-    const std::string subname = "Graph::ReceiveFrequency::" + tracking.topic_name;
+    const std::string subname = "ReceiveFrequency::" + tracking.topic_name;
     bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
     if (deadline_not_set(deadline)) {
       // No deadline, don't care
@@ -542,7 +542,7 @@ diagnostic_msgs::msg::DiagnosticStatus RosGraphMonitor::statusMsg(
 {
   diagnostic_msgs::msg::DiagnosticStatus msg;
   msg.level = level;
-  msg.name = "rosgraph";
+  msg.name = config_.diagnostic_namespace;
   if (!subname.empty()) {
     msg.name += "::" + subname;
   }

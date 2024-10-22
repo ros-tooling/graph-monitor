@@ -45,18 +45,21 @@ bool GraphAnalyzer::init(
   const std::string & base_path,
   const rosgraph_monitor::Params::GraphAnalyzer & params)
 {
+  graph_diagnostic_prefix_ = params.diagnostic_prefix;
   name_match_regex_text_ = "^" + graph_diagnostic_prefix_ + "(Node|PublishFrequency)::.+";
   name_match_regex_ = name_match_regex_text_;
   pub_freq_diagnostic_prefix_ = graph_diagnostic_prefix_ + "PublishFrequency::";
   node_diagnostic_prefix_ = graph_diagnostic_prefix_ + "Node::";
 
   path_ = base_path + "/" + name_;
-  RCLCPP_INFO(logger_, "BASE BAPTH IS %s", path_.c_str());
   ignore_deadline_topics_ = std::unordered_set<std::string>(
     params.ignore_deadline_topics.begin(),
     params.ignore_deadline_topics.end());
   all_nodes_required_ = params.all_nodes_required;
   items_.clear();
+
+  RCLCPP_INFO(logger_, "Match pattern is %s", name_match_regex_text_.c_str());
+  RCLCPP_INFO(logger_, "Base output path is %s", path_.c_str());
 
   // For configured expected topics, put a missing status in up front
   for (const auto & topic : params.mandatory_frequency_topics) {

@@ -1,10 +1,14 @@
 rosgraph_monitor:
   diagnostics_publish_period_ms:
     type: int
-    default_value: 500
+    default_value: 1000
     read_only: true
     description: "Period in milliseconds between each publishing of the graph diagnostics."
   graph_monitor:
+    diagnostic_namespace:
+      type: string
+      description: Namespace to put up front of generated diagnostics
+      default_value: Rosgraph
     nodes:
       ignore_prefixes:
         type: string_array
@@ -52,6 +56,11 @@ rosgraph_monitor:
         description: Maximum period to receive updated statistics for a topic before an error is raised that it is missing
         default_value: 3000
   graph_analyzer:
+    diagnostic_prefix:
+      type: string
+      description: Prefix on diagnostics to match
+      default_value: "Rosgraph::"
+      read_only: true
     mandatory_frequency_topics:
       type: string_array
       description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.

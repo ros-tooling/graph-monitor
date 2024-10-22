@@ -45,10 +45,6 @@ Node::Node(const rclcpp::NodeOptions & options)
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
     GraphMonitorConfiguration()),
-  timer_publish_report_(
-    create_wall_timer(
-      std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
-      std::bind(&Node::publish_diagnostics, this))),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
       "/topic_statistics",
@@ -69,6 +65,10 @@ Node::Node(const rclcpp::NodeOptions & options)
 {
   on_new_params();
   graph_analyzer_.init("/Health", params_.graph_analyzer);
+  // Don't start evaluation timer until after first configuration of the monitor
+  timer_publish_report_ = create_wall_timer(
+      std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
+      std::bind(&Node::publish_diagnostics, this));
 }
 
 rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(
@@ -95,6 +95,7 @@ void Node::on_new_params()
 {
   const rosgraph_monitor::Params::GraphMonitor & gparms = params_.graph_monitor;
   GraphMonitorConfiguration gconf;
+  gconf.diagnostic_namespace = gparms.diagnostic_namespace;
   gconf.nodes.ignore_prefixes = gparms.nodes.ignore_prefixes;
   gconf.nodes.warn_only_prefixes = gparms.nodes.warn_only_prefixes;
   gconf.continuity.enable = gparms.continuity.enable;

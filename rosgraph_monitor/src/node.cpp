@@ -67,8 +67,8 @@ Node::Node(const rclcpp::NodeOptions & options)
   graph_analyzer_.init("/Health", params_.graph_analyzer);
   // Don't start evaluation timer until after first configuration of the monitor
   timer_publish_report_ = create_wall_timer(
-      std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
-      std::bind(&Node::publish_diagnostics, this));
+    std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
+    std::bind(&Node::publish_diagnostics, this));
 }
 
 rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(

@@ -21,12 +21,20 @@ std::size_t std::hash<RosRmwGid>::operator()(
   const RosRmwGid & id) const noexcept
 {
   constexpr std::size_t u64s = sizeof(uint64_t);
-  static_assert(sizeof(RosRmwGid) == (3 * u64s));
-  uint64_t d0, d1, d2;
-  std::memcpy(&d0, id.data() + (0 * u64s), u64s);
-  std::memcpy(&d1, id.data() + (1 * u64s), u64s);
-  std::memcpy(&d2, id.data() + (2 * u64s), u64s);
-  return d0 + d1 + d2;
+  static_assert(sizeof(RosRmwGid) == (3 * u64s) || sizeof(RosRmwGid) == (2 * u64s));
+  if (sizeof(RosRmwGid) == (2 * u64s)) {
+    uint64_t d0, d1;
+    std::memcpy(&d0, id.data() + (0 * u64s), u64s);
+    std::memcpy(&d1, id.data() + (1 * u64s), u64s);
+    return d0 + d1;
+  } else if (sizeof(RosRmwGid) == (3 * u64s)) {
+    uint64_t d0, d1, d2;
+    std::memcpy(&d0, id.data() + (0 * u64s), u64s);
+    std::memcpy(&d1, id.data() + (1 * u64s), u64s);
+    std::memcpy(&d2, id.data() + (2 * u64s), u64s);
+    return d0 + d1 + d2;
+  }
+  return 0;
 }
 
 std::size_t std::hash<std::pair<std::string, std::string>>::operator()(

@@ -82,6 +82,10 @@ public:
   MOCK_METHOD(size_t, count_publishers, (const std::string &), (const, override));
   MOCK_METHOD(size_t, count_subscribers, (const std::string &), (const, override));
   MOCK_METHOD(const rcl_guard_condition_t *, get_graph_guard_condition, (), (const, override));
+  #ifdef ROS2_JAZZY
+  MOCK_METHOD(size_t, count_clients, (const std::string &), (const, override));
+  MOCK_METHOD(size_t, count_services, (const std::string &), (const, override));
+  #endif
 
   void
   notify_graph_change() override

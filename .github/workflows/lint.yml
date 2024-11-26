@@ -1,0 +1,25 @@
+name: Lint
+on:
+  pull_request:
+
+env:
+  AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS: true
+
+jobs:
+  ament_lint_general:
+    strategy:
+      fail-fast: false
+      matrix:
+        linter: [copyright, xmllint, cppcheck, cpplint]
+    name: ament_${{ matrix.linter }}
+    runs-on: ubuntu-latest
+    container:
+      image: rostooling/setup-ros-docker:ubuntu-jammy-ros-rolling-ros-base-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ros-tooling/action-ros-lint@v0.1
+      with:
+        linter: ${{ matrix.linter }}
+        arguments: ${{ matrix.arguments }}
+        distribution: rolling
+        package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs telegraf_bridge

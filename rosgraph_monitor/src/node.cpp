@@ -18,7 +18,7 @@
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
-#include "rosgraph_monitor_generated_parameters.hpp"
+#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 
 namespace
 {

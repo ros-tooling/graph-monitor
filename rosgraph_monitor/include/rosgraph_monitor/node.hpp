@@ -23,7 +23,7 @@
 #include "rclcpp/node.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
-#include "rosgraph_monitor_generated_parameters.hpp"
+#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 #include "rosgraph_monitor/graph_analyzer.hpp"
 #include "rosgraph_monitor/monitor.hpp"
 

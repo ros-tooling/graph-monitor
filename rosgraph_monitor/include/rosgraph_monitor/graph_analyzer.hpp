@@ -25,7 +25,7 @@
 #include "diagnostic_aggregator/analyzer.hpp"
 #include "rclcpp/logger.hpp"
 
-#include "rosgraph_monitor_generated_parameters.hpp"
+#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 
 namespace rosgraph_monitor
 {

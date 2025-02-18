@@ -88,6 +88,9 @@ if(BUILD_TESTING)
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor
     ${PROJECT_NAME})
+
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_graph_monitor_launch.py)
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

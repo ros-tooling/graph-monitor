@@ -32,6 +32,10 @@ namespace rosgraph_monitor
 
 class Node : public rclcpp::Node
 {
+private:
+  static GraphMonitorConfiguration create_graph_monitor_config(
+    const rosgraph_monitor::Params & params);
+
 public:
   explicit Node(const rclcpp::NodeOptions & options);
 

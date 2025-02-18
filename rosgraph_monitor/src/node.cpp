@@ -33,6 +33,23 @@ std::unordered_set<T> vec_to_set(const std::vector<T> & in)
 
 namespace rosgraph_monitor
 {
+GraphMonitorConfiguration Node::create_graph_monitor_config(
+  const rosgraph_monitor::Params & params)
+{
+  const rosgraph_monitor::Params::GraphMonitor & gparms = params.graph_monitor;
+  GraphMonitorConfiguration gconf;
+  gconf.diagnostic_namespace = gparms.diagnostic_namespace;
+  gconf.nodes.ignore_prefixes = gparms.nodes.ignore_prefixes;
+  gconf.nodes.warn_only_prefixes = gparms.nodes.warn_only_prefixes;
+  gconf.continuity.enable = gparms.continuity.enable;
+  gconf.continuity.ignore_subscriber_nodes = vec_to_set(gparms.continuity.ignore_subscriber_nodes);
+  gconf.continuity.ignore_topic_types = vec_to_set(gparms.continuity.ignore_topic_types);
+  gconf.continuity.ignore_topic_names = vec_to_set(gparms.continuity.ignore_topic_names);
+  gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
+  gconf.topic_statistics.stale_timeout =
+    std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
+  return gconf;
+}
 
 Node::Node(const rclcpp::NodeOptions & options)
 : rclcpp::Node("rosgraph_monitor", options),
@@ -44,7 +61,7 @@ Node::Node(const rclcpp::NodeOptions & options)
     get_node_graph_interface(),
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
-    GraphMonitorConfiguration()),
+    create_graph_monitor_config(params_)),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
       "/topic_statistics",
@@ -63,8 +80,8 @@ Node::Node(const rclcpp::NodeOptions & options)
       "/diagnostics_toplevel_status",
       10))
 {
-  on_new_params();
   graph_analyzer_.init("/Health", params_.graph_analyzer);
+
   // Don't start evaluation timer until after first configuration of the monitor
   timer_publish_report_ = create_wall_timer(
     std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
@@ -93,20 +110,7 @@ rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(
 
 void Node::on_new_params()
 {
-  const rosgraph_monitor::Params::GraphMonitor & gparms = params_.graph_monitor;
-  GraphMonitorConfiguration gconf;
-  gconf.diagnostic_namespace = gparms.diagnostic_namespace;
-  gconf.nodes.ignore_prefixes = gparms.nodes.ignore_prefixes;
-  gconf.nodes.warn_only_prefixes = gparms.nodes.warn_only_prefixes;
-  gconf.continuity.enable = gparms.continuity.enable;
-  gconf.continuity.ignore_subscriber_nodes = vec_to_set(gparms.continuity.ignore_subscriber_nodes);
-  gconf.continuity.ignore_topic_types = vec_to_set(gparms.continuity.ignore_topic_types);
-  gconf.continuity.ignore_topic_names = vec_to_set(gparms.continuity.ignore_topic_names);
-  gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
-  gconf.topic_statistics.stale_timeout =
-    std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
-
-  graph_monitor_.config() = gconf;
+  graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)

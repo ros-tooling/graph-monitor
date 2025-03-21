@@ -1,5 +1,9 @@
 # ROS 2 Health Monitoring Components
 
+A collection of packages for monitoring the health of an entire ROS 2 application.
+
+As presented at ROSCon 2024 in "ROS robot health monitoring, the Bonsai approach": https://vimeo.com/1024971769
+
 See each package's README for more detailed information.
 
 Packages here:

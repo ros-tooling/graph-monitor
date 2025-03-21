@@ -4,6 +4,8 @@ A collection of packages for monitoring the health of an entire ROS 2 applicatio
 
 As presented at ROSCon 2024 in "ROS robot health monitoring, the Bonsai approach": https://vimeo.com/1024971769
 
+Also see https://github.com/BonsaiRobotics/roscon2024_health_sample for a sample application setting up these components.
+
 See each package's README for more detailed information.
 
 Packages here:

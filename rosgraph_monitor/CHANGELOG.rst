@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.1 (2025-04-09)
+------------------
 * Remove telegraf bridge and update some language
 * RAII initialization of RosgraphMonitor (`#12 <https://github.com/ros-tooling/graph-monitor/issues/12>`_)
 * Fix build issues with latest generate_parameter_library (`#11 <https://github.com/ros-tooling/graph-monitor/issues/11>`_)

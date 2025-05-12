@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.2 (2025-05-12)
+------------------
 * Kilted support (`#6 <https://github.com/ros-tooling/graph-monitor/issues/6>`_)
 * Contributors: Emerson Knapp
 

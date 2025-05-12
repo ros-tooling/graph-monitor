@@ -33,11 +33,8 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 
-if("$ENV{ROS_DISTRO}" STREQUAL "jazzy")
-  add_compile_definitions("-DROS2_JAZZY")
-endif()
-if("$ENV{ROS_DISTRO}" STREQUAL "rolling")
-  add_compile_definitions("-DROS2_JAZZY")
+if("$ENV{ROS_DISTRO}" STREQUAL "humble")
+  add_compile_definitions("ROS2_HUMBLE")
 endif()
 
 # Library

@@ -2,6 +2,11 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Kilted support (`#6 <https://github.com/ros-tooling/graph-monitor/issues/6>`_)
+* Contributors: Emerson Knapp
+
 0.1.1 (2025-04-09)
 ------------------
 * Remove telegraf bridge and update some language

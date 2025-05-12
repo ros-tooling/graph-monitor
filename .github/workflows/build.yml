@@ -35,7 +35,7 @@ jobs:
             {"rmw_implementation":
               {"type": "git",
               "url": "https://github.com/robograph-project/rmw_implementation",
-              "version": "${{ matrix.ros }}-bonsai"
+              "version": "${{ matrix.ros }}-rmw-wrapper"
               }
             }
           }

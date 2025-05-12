@@ -34,7 +34,7 @@ find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 
 if("$ENV{ROS_DISTRO}" STREQUAL "humble")
-  add_compile_definitions("-DROS2_HUMBLE")
+  add_compile_definitions("ROS2_HUMBLE")
 endif()
 
 # Library

@@ -40,25 +40,22 @@ public:
   explicit Node(const rclcpp::NodeOptions & options);
 
 protected:
-  rcl_interfaces::msg::SetParametersResult on_parameter_event(
-    const std::vector<rclcpp::Parameter> & parameters);
-  void on_new_params();
+  void update_params(const rosgraph_monitor::Params & params);
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg);
   void publish_diagnostics();
 
-  std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> param_cb_handle_;
-  std::shared_ptr<rosgraph_monitor::ParamListener> param_listener_;
+  rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;
 
   RosGraphMonitor graph_monitor_;
   GraphAnalyzer graph_analyzer_;
 
-  rclcpp::TimerBase::SharedPtr timer_publish_report_;
   rclcpp::Subscription<rosgraph_monitor_msgs::msg::TopicStatistics>::SharedPtr
     sub_topic_statistics_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostic_agg_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticStatus>::SharedPtr pub_diagnostic_toplevel_;
+  rclcpp::TimerBase::SharedPtr timer_publish_report_;
 };
 
 }  // namespace rosgraph_monitor

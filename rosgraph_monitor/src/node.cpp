@@ -69,21 +69,32 @@ Node::Node(const rclcpp::NodeOptions & options)
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics",
       10)),
-  pub_diagnostic_agg_(
-    create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
-      "/diagnostics_agg",
-      10)),
-  pub_diagnostic_toplevel_(
-    create_publisher<diagnostic_msgs::msg::DiagnosticStatus>(
-      "/diagnostics_toplevel_status",
-      10)),
   timer_publish_report_(
     create_wall_timer(
       std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
       std::bind(&Node::publish_diagnostics, this)))
 {
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
-  graph_analyzer_.init("/Health", params_.graph_analyzer);
+}
+
+rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(
+  const std::vector<rclcpp::Parameter> & /* parameters */)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  if (!param_listener_) {
+    return result;
+  } else if (param_listener_->is_old(params_)) {
+    params_ = param_listener_->get_params();
+  } else {
+    RCLCPP_WARN(get_logger(), "Received parameter callback, but parameters weren't outdated");
+    result.successful = false;
+    return result;
+  }
+
+  on_new_params();
+  return result;
 }
 
 void Node::update_params(const rosgraph_monitor::Params & params)
@@ -100,27 +111,6 @@ void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics
 void Node::publish_diagnostics()
 {
   auto diagnostic_array = graph_monitor_.evaluate();
-
-  // TODO(ek) probably possible & cleaner to implement using DiagnosticAggregator with Analyzers
-  // Evaluate all diagnostics into final aggregated set for reporting
-  for (const auto & status : diagnostic_array->status) {
-    if (graph_analyzer_.match(status.name)) {
-      auto item = std::make_shared<diagnostic_aggregator::StatusItem>(&status);
-      graph_analyzer_.analyze(item);
-    }
-  }
-  auto agg_statuses = graph_analyzer_.report();
-
-  // Evaluate aggregated diagnostics into one single toplevel status "result"
-  auto diagnostic_toplevel = *agg_statuses[0];
-  diagnostic_msgs::msg::DiagnosticArray diagnostic_agg;
-  diagnostic_agg.header.stamp = get_clock()->now();
-  for (const auto & status : agg_statuses) {
-    diagnostic_agg.status.push_back(*status);
-  }
-  // Publish both the aggregated statuses and the result
-  pub_diagnostic_agg_->publish(diagnostic_agg);
-  pub_diagnostic_toplevel_->publish(diagnostic_toplevel);
   pub_diagnostics_->publish(std::move(diagnostic_array));
 }
 

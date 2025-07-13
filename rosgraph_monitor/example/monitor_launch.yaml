@@ -1,0 +1,26 @@
+---
+
+# This launchfile is an example of how to run a configured rosgraph_monitor with diagnosic aggregation.
+launch:
+  - arg:
+      name: graph_monitor_params
+      default: ""
+  - arg:
+      name: diagnostic_aggregator_params
+      default: ""
+  - arg:
+      name: diagnostics_agg
+      default: "true"
+  - node:
+      pkg: rosgraph_monitor
+      exec: rosgraph_monitor_node
+      name: graph_monitor
+      param:
+        - from: $(var graph_monitor_params)
+  - node:
+      pkg: diagnostic_aggregator
+      exec: aggregator_node
+      name: diagnostic_aggregator
+      if: $(var diagnostics_agg)
+      param:
+        - from: $(var diagnostic_aggregator_params)

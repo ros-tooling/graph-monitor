@@ -19,6 +19,7 @@
 #include <optional>
 #include <string_view>
 
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gmock/gmock.h"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 
@@ -361,7 +362,10 @@ protected:
     std::vector<StatusCheck> expectations,
     std::string testname)
   {
-    auto msg = graphmon_->evaluate();
+    auto msg = std::make_shared<diagnostic_msgs::msg::DiagnosticArray>();
+    msg->header.stamp = now_;
+    msg->header.frame_id = "rosgraph_monitor";
+    graphmon_->evaluate(msg->status);
     auto repr = diagnostic_msgs::msg::to_yaml(*msg);
     ASSERT_THAT(msg->status, SizeIs(expectations.size())) << repr << testname;
     for (size_t i = 0; i < expectations.size(); i++) {

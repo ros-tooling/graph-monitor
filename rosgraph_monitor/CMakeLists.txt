@@ -27,8 +27,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 
-find_package(diagnostic_aggregator REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(diagnostic_updater REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
@@ -46,6 +46,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
 target_link_libraries(${PROJECT_NAME} PUBLIC
+  diagnostic_updater::diagnostic_updater
   rclcpp::rclcpp
   ${diagnostic_msgs_TARGETS}
   ${rosgraph_monitor_msgs_TARGETS}
@@ -57,7 +58,6 @@ generate_parameter_library(${PROJECT_NAME}_generated_parameters
 
 # Node
 add_library(${PROJECT_NAME}_nodelib SHARED
-  src/graph_analyzer.cpp
   src/node.cpp
 )
 target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
@@ -66,7 +66,6 @@ target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
 target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
   ${PROJECT_NAME}
   ${PROJECT_NAME}_generated_parameters
-  diagnostic_aggregator::diagnostic_aggregator
   rclcpp_components::component
   ${diagnostic_msgs_TARGETS}
   ${rosgraph_monitor_msgs_TARGETS}

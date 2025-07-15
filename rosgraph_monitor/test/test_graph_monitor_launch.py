@@ -19,12 +19,12 @@ import threading
 import time
 import unittest
 
+import pytest
+import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_testing.actions import ReadyToTest
-import pytest
-import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from std_msgs.msg import Bool
@@ -33,17 +33,17 @@ from std_msgs.msg import Bool
 @pytest.mark.launch_test
 def generate_test_description():
     # Initialize with default params
-    device_under_test = Node(
-        package='rosgraph_monitor',
-        executable='rosgraph_monitor_node',
-        name='rosgraph_monitor',
-        output='screen',
-        arguments=['--ros-args', '--log-level', 'DEBUG'],
-    )
 
-    context = {'device_under_test': device_under_test}
-    return (LaunchDescription([device_under_test,
-                               ReadyToTest()]),  context)
+    return LaunchDescription([
+        Node(
+            package='rosgraph_monitor',
+            executable='rosgraph_monitor_node',
+            name='rosgraph_monitor',
+            output='screen',
+            arguments=['--ros-args', '--log-level', 'DEBUG'],
+        ),
+        ReadyToTest()
+    ])
 
 
 class TestProcessOutput(unittest.TestCase):

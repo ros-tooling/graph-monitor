@@ -77,26 +77,6 @@ Node::Node(const rclcpp::NodeOptions & options)
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
 }
 
-rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(
-  const std::vector<rclcpp::Parameter> & /* parameters */)
-{
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
-
-  if (!param_listener_) {
-    return result;
-  } else if (param_listener_->is_old(params_)) {
-    params_ = param_listener_->get_params();
-  } else {
-    RCLCPP_WARN(get_logger(), "Received parameter callback, but parameters weren't outdated");
-    result.successful = false;
-    return result;
-  }
-
-  on_new_params();
-  return result;
-}
-
 void Node::update_params(const rosgraph_monitor::Params & params)
 {
   params_ = params;
@@ -110,7 +90,12 @@ void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics
 
 void Node::publish_diagnostics()
 {
-  auto diagnostic_array = graph_monitor_.evaluate();
+  auto diagnostic_array = std::make_unique<diagnostic_msgs::msg::DiagnosticArray>();
+  diagnostic_array->header.stamp = get_clock()->now();
+  diagnostic_array->header.frame_id = "rosgraph_monitor";
+
+  graph_monitor_.evaluate(diagnostic_array->status);
+
   pub_diagnostics_->publish(std::move(diagnostic_array));
 }
 

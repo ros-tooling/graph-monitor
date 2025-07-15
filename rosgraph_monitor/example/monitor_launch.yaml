@@ -17,6 +17,9 @@ launch:
       name: graph_monitor
       param:
         - from: $(var graph_monitor_params)
+        - name: graph_monitor.continuity.enable
+          value: false
+      on_exit: shutdown
   - node:
       pkg: diagnostic_aggregator
       exec: aggregator_node
@@ -24,3 +27,4 @@ launch:
       if: $(var diagnostics_agg)
       param:
         - from: $(var diagnostic_aggregator_params)
+      on_exit: shutdown

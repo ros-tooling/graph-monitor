@@ -1,13 +1,10 @@
-# ROS 2 Health Monitoring Components
+# ROS 2 Graph Monitor
 
-See each package's README for more detailed information.
+The packages in this repository implement application-level health monitoring for a ROS 2 connected graph of nodes.
 
-Packages here:
-* [rmw_stats_shim](./rmw_stats_shim/) - RMW wrapper to gather and report global topic statistics
-* [rosgraph_monitor](./rosgraph_monitor/) - Single component to monitor the ROS graph as a whole and publish diagnostics
-* [rosgraph_monitor_msgs](./rosgraph_monitor_msgs/) - Messages for reporting graph monitoring information
-* [telegraf_bridge](./telegraf_bridge/) - Node to collect local ROS information and forward to Telegraf for using in backend timeseries infrastructure
+The components were originally presented at ROSCon 2024 in "ROS robot health monitoring, the Bonsai approach": https://vimeo.com/1024971769
 
-Also note:
-* [patched rmw_implementation](https://github.com/BonsaiRobotics/rmw_implementation)
-  * Needed to use `rmw_stats_shim`
+See each package's README for more detailed information:
+* [rosgraph_monitor](./rosgraph_monitor/) - Component to monitor the ROS graph and publish resulting diagnostics
+* [rosgraph_monitor_msgs](./rosgraph_monitor_msgs/) - Messages for reporting graph monitoring information, namely topic statistics
+* [rmw_stats_shim](./rmw_stats_shim/) - RMW wrapper to efficiently gather and report topic statistics for all nodes

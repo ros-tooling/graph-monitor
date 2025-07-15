@@ -1,10 +1,12 @@
 # Rosgraph Monitor
 
-Provides a C++ class `RosgraphMonitor` which uses a `NodeGraphInterface` and `/topic_statistics` to monitor the ROS computation graph and produce `/diagnostics (DiagnosticArray)` about issues in the graph:
+Provides a C++ class `RosgraphMonitor`, which uses a node's `NodeGraphInterface` and subscribes to `/topic_statistics` to monitor the ROS computation graph and produce `/diagnostics (DiagnosticArray)` about issues in the graph:
 * Missing Nodes (nodes that were present and are now missing)
 * Discontinuities in graph (publishers or subscriptions that have no counterparts)
 * Data flow issues (topics not publishing at promised rate)
   * `/topic_statistics` required for this. See `rmw_stats_shim` for how those are produced
+
+This also provides a `rosgraph_monitor_node` for standalone use, for users who do not need custom integration of the `RosgraphMonitor` class.
 
 ## Topic Statistics Diagnostics
 

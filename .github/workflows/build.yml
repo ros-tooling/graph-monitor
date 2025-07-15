@@ -16,11 +16,13 @@ jobs:
             ubuntu: jammy
           - ros: jazzy
             ubuntu: noble
+          - ros: kilted
+            ubuntu: noble-testing
           - ros: rolling
             ubuntu: noble
     name: ROS 2 ${{ matrix.ros }}
     container:
-      image: rostooling/setup-ros-docker:ubuntu-${{ matrix.ubuntu }}-latest
+      image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
       ROS_DISTRO: ${{ matrix.ros }}
     steps:
@@ -32,18 +34,18 @@ jobs:
           {"repositories":
             {"rmw_implementation":
               {"type": "git",
-              "url": "https://github.com/BonsaiRobotics/rmw_implementation",
-              "version": "${{ matrix.ros }}-bonsai"
+              "url": "https://github.com/robograph-project/rmw_implementation",
+              "version": "${{ matrix.ros }}-rmw-wrapper"
               }
             }
           }
           EOF
-      - uses: ros-tooling/action-ros-ci@v0.3
+      - uses: ros-tooling/action-ros-ci@v0.4
         with:
           target-ros2-distro: ${{ matrix.ros }}
           vcs-repo-file-url: /tmp/deps.repos
           # Not testing rmw_implementation here, with the expectation it's tested at its own home
-          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs telegraf_bridge
+          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs
           colcon-defaults: |
             {
               "build": {

@@ -18,7 +18,7 @@
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
-#include "rosgraph_monitor_generated_parameters.hpp"
+#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 
 namespace
 {
@@ -33,18 +33,33 @@ std::unordered_set<T> vec_to_set(const std::vector<T> & in)
 
 namespace rosgraph_monitor
 {
+GraphMonitorConfiguration Node::create_graph_monitor_config(
+  const rosgraph_monitor::Params & params)
+{
+  const rosgraph_monitor::Params::GraphMonitor & gparms = params.graph_monitor;
+  GraphMonitorConfiguration gconf;
+  gconf.diagnostic_namespace = gparms.diagnostic_namespace;
+  gconf.nodes.ignore_prefixes = gparms.nodes.ignore_prefixes;
+  gconf.nodes.warn_only_prefixes = gparms.nodes.warn_only_prefixes;
+  gconf.continuity.enable = gparms.continuity.enable;
+  gconf.continuity.ignore_subscriber_nodes = vec_to_set(gparms.continuity.ignore_subscriber_nodes);
+  gconf.continuity.ignore_topic_types = vec_to_set(gparms.continuity.ignore_topic_types);
+  gconf.continuity.ignore_topic_names = vec_to_set(gparms.continuity.ignore_topic_names);
+  gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
+  gconf.topic_statistics.stale_timeout =
+    std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
+  return gconf;
+}
 
 Node::Node(const rclcpp::NodeOptions & options)
 : rclcpp::Node("rosgraph_monitor", options),
-  param_cb_handle_(get_node_parameters_interface()->add_on_set_parameters_callback(
-      std::bind(&Node::on_parameter_event, this, std::placeholders::_1))),
-  param_listener_(new rosgraph_monitor::ParamListener(get_node_parameters_interface())),
-  params_(param_listener_->get_params()),
+  param_listener_(get_node_parameters_interface()),
+  params_(param_listener_.get_params()),
   graph_monitor_(
     get_node_graph_interface(),
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
-    GraphMonitorConfiguration()),
+    create_graph_monitor_config(params_)),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
       "/topic_statistics",
@@ -61,52 +76,20 @@ Node::Node(const rclcpp::NodeOptions & options)
   pub_diagnostic_toplevel_(
     create_publisher<diagnostic_msgs::msg::DiagnosticStatus>(
       "/diagnostics_toplevel_status",
-      10))
+      10)),
+  timer_publish_report_(
+    create_wall_timer(
+      std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
+      std::bind(&Node::publish_diagnostics, this)))
 {
-  on_new_params();
+  param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
   graph_analyzer_.init("/Health", params_.graph_analyzer);
-  // Don't start evaluation timer until after first configuration of the monitor
-  timer_publish_report_ = create_wall_timer(
-    std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
-    std::bind(&Node::publish_diagnostics, this));
 }
 
-rcl_interfaces::msg::SetParametersResult Node::on_parameter_event(
-  const std::vector<rclcpp::Parameter> & /* parameters */)
+void Node::update_params(const rosgraph_monitor::Params & params)
 {
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
-
-  if (!param_listener_) {
-    return result;
-  } else if (param_listener_->is_old(params_)) {
-    params_ = param_listener_->get_params();
-  } else {
-    RCLCPP_WARN(get_logger(), "Received parameter callback, but parameters weren't outdated");
-    result.successful = false;
-    return result;
-  }
-
-  on_new_params();
-  return result;
-}
-
-void Node::on_new_params()
-{
-  const rosgraph_monitor::Params::GraphMonitor & gparms = params_.graph_monitor;
-  GraphMonitorConfiguration gconf;
-  gconf.diagnostic_namespace = gparms.diagnostic_namespace;
-  gconf.nodes.ignore_prefixes = gparms.nodes.ignore_prefixes;
-  gconf.nodes.warn_only_prefixes = gparms.nodes.warn_only_prefixes;
-  gconf.continuity.enable = gparms.continuity.enable;
-  gconf.continuity.ignore_subscriber_nodes = vec_to_set(gparms.continuity.ignore_subscriber_nodes);
-  gconf.continuity.ignore_topic_types = vec_to_set(gparms.continuity.ignore_topic_types);
-  gconf.continuity.ignore_topic_names = vec_to_set(gparms.continuity.ignore_topic_names);
-  gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
-  gconf.topic_statistics.stale_timeout =
-    std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
-
-  graph_monitor_.config() = gconf;
+  params_ = params;
+  graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)

@@ -22,4 +22,4 @@ jobs:
         linter: ${{ matrix.linter }}
         arguments: ${{ matrix.arguments }}
         distribution: rolling
-        package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs telegraf_bridge
+        package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs

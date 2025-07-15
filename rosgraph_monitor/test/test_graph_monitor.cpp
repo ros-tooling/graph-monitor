@@ -342,9 +342,12 @@ protected:
   const std::string pub_freq_diagnostic = "rosgraph/publish_frequency";
   const std::string sub_freq_diagnostic = "rosgraph/receive_frequency";
 
-  /// @brief Evaluate the current graph monitoring status, look for the given diagnostic name, and assert it matches expectations
+  /// @brief Evaluate the current graph monitoring status, look for the given diagnostic name,
+  ///  and assert it matches expectations
   /// @param diagnostic_name Full name of the diagnostic to look at, ignore others
   /// @param level Expected level that diagnostic should be at
+  /// @param maybe_message_pattern Optional string used to make a regex match against the message
+  ///   if nullopt, message is not checked
   void
   check_status(
     const std::string & diagnostic_name,

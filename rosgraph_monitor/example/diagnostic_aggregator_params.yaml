@@ -6,7 +6,7 @@
     graph:
       type: diagnostic_aggregator/AnalyzerGroup
       path: RosGraph
-      startswith: ["/rosgraph"]
+      startswith: ["rosgraph"]
       analyzers:
         nodes:
           type: diagnostic_aggregator/GenericAnalyzer

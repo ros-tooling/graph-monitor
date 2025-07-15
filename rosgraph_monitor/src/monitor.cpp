@@ -375,13 +375,13 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
   for (const std::string & node_name : returned_nodes_) {
     nodes_status.addf("Node came back: %s", node_name.c_str());
   }
+  if (missing_required_nodes > 0) {
+    nodes_status.summaryf(
+      DiagnosticStatus::ERROR, "%d required node(s) missing.", missing_required_nodes);
+  }
   if (missing_optional_nodes > 0) {
     nodes_status.mergeSummaryf(
-      DiagnosticStatus::WARN, "%d optional nodes missing.", missing_optional_nodes);
-  }
-  if (missing_required_nodes > 0) {
-    nodes_status.mergeSummaryf(
-      DiagnosticStatus::ERROR, "%d required nodes missing.", missing_required_nodes);
+      DiagnosticStatus::WARN, "%d optional node(s) missing.", missing_optional_nodes);
   }
   status.push_back(nodes_status);
 

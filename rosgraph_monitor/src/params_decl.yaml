@@ -8,7 +8,7 @@ rosgraph_monitor:
     diagnostic_namespace:
       type: string
       description: Namespace to put up front of generated diagnostics
-      default_value: /rosgraph
+      default_value: rosgraph
     nodes:
       ignore_prefixes:
         type: string_array

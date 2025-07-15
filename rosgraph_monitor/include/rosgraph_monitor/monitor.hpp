@@ -59,7 +59,7 @@ std::string gid_to_str(const RosRmwGid & gid);
 
 struct GraphMonitorConfiguration
 {
-  std::string diagnostic_namespace{"Rosgraph"};
+  std::string diagnostic_namespace{"rosgraph"};
 
   struct NodeChecks
   {

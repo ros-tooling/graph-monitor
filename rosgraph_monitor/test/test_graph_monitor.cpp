@@ -353,13 +353,21 @@ protected:
   {
     diagnostic_msgs::msg::DiagnosticArray msg;
     graphmon_->evaluate(msg.status);
-    auto it = std::find_if(msg.status.begin(), msg.status.end(), [&diagnostic_name](const auto & status) { return status.name == diagnostic_name; });
+    auto it =
+      std::find_if(
+      msg.status.begin(), msg.status.end(), [&diagnostic_name](const auto & status) {
+        return status.name == diagnostic_name;
+      });
     ASSERT_NE(it, msg.status.end()) << "Expected diagnostic " << diagnostic_name << " not present";
 
     EXPECT_EQ(it->level, level);
     if (maybe_message_pattern) {
       std::regex message_re{*maybe_message_pattern};
-      EXPECT_TRUE(std::regex_search(it->message, message_re)) << "Message '" << it->message << "' does not match regex R'" << *maybe_message_pattern << "'";
+      EXPECT_TRUE(
+        std::regex_search(
+          it->message,
+          message_re)) << "Message '" << it->message << "' does not match regex R'" <<
+        *maybe_message_pattern << "'";
     }
   }
 
@@ -375,7 +383,7 @@ protected:
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
-#define CHECK_STATUS(message, ...) { SCOPED_TRACE(message); check_status(__VA_ARGS__); }
+#define CHECK_STATUS(message, ...) {SCOPED_TRACE(message); check_status(__VA_ARGS__);}
 
 TEST_F(GraphMonitorTest, node_liveness)
 {
@@ -528,8 +536,12 @@ TEST_F(GraphMonitorTest, topic_frequency_no_deadline_dont_care)
   add_sub("/topic1", "type1", default_node_name_, cyclone_received_qos);
   trigger_and_wait();
   now_ = rclcpp::Time(5, 0, RCL_ROS_TIME);
-  CHECK_STATUS("Publisher with no deadline reports no frequency diagnostic", pub_freq_diagnostic, OK);
-  CHECK_STATUS("Subscription to no deadline reports no frequency diagnostic", sub_freq_diagnostic, OK);
+  CHECK_STATUS(
+    "Publisher with no deadline reports no frequency diagnostic", pub_freq_diagnostic,
+    OK);
+  CHECK_STATUS(
+    "Subscription to no deadline reports no frequency diagnostic", sub_freq_diagnostic,
+    OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_happy)

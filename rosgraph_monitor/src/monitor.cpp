@@ -420,7 +420,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
   // Frequency
   auto deadline_not_set = [](const rclcpp::Duration & dur) {
       return rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_INFINITE) ||
-            rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_UNSPECIFIED);
+             rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_UNSPECIFIED);
     };
   {
     diagnostic_updater::DiagnosticStatusWrapper pub_freq_status;

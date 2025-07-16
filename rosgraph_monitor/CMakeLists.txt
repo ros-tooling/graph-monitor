@@ -76,23 +76,13 @@ rclcpp_components_register_node(${PROJECT_NAME}_nodelib
   EXECUTABLE ${PROJECT_NAME}_node
 )
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
-
-  find_package(ament_cmake_gmock REQUIRED)
-  ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
-  target_link_libraries(test_graph_monitor
-    ${PROJECT_NAME})
-
-  find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/test_graph_monitor_launch.py)
-endif()
-
-ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 install(
   DIRECTORY include/
   DESTINATION include
+)
+install(
+  DIRECTORY launch config
+  DESTINATION share/${PROJECT_NAME}
 )
 install(
   TARGETS
@@ -106,5 +96,18 @@ install(
   INCLUDES DESTINATION include
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gmock REQUIRED)
+  find_package(ament_lint_auto REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
 
+  ament_lint_auto_find_test_dependencies()
+
+  ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
+  target_link_libraries(test_graph_monitor ${PROJECT_NAME})
+
+  add_launch_test(test/test_graph_monitor_launch.py)
+endif()
+
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_package()

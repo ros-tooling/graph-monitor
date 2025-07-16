@@ -1,17 +1,24 @@
 ---
 
-# This launchfile is an example of how to run a configured rosgraph_monitor with diagnosic aggregation.
+# Starts RosGraphMonitor Node and Diagnostic Aggregator with default parameters, both configurable by argument
 launch:
+  # Arguments
   - arg:
       name: graph_monitor_params
-      default: ""
+      default: ''
   - arg:
       name: diagnostic_aggregator_params
-      default: ""
+      default: $(find-pkg-share rosgraph_monitor)/config/diagnostic_aggregator_params.yaml
   - arg:
       name: diagnostics_agg
       default: "true"
+  - arg:
+      name: log_level
+      default: INFO
+
+  # Actions
   - node:
+      on_exit: shutdown
       pkg: rosgraph_monitor
       exec: rosgraph_monitor_node
       name: graph_monitor
@@ -19,12 +26,13 @@ launch:
         - from: $(var graph_monitor_params)
         - name: graph_monitor.continuity.enable
           value: false
-      on_exit: shutdown
+      ros_args: --log-level $(var log_level)
   - node:
+      if: $(var diagnostics_agg)
+      on_exit: shutdown
       pkg: diagnostic_aggregator
       exec: aggregator_node
       name: diagnostic_aggregator
-      if: $(var diagnostics_agg)
+      ros_args: --log-level $(var log_level)
       param:
         - from: $(var diagnostic_aggregator_params)
-      on_exit: shutdown

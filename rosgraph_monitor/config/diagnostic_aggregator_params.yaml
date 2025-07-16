@@ -1,0 +1,31 @@
+---
+
+/**:
+  ros__parameters:
+    path: Health
+    graph:
+      type: diagnostic_aggregator/AnalyzerGroup
+      path: RosGraph
+      startswith: ["rosgraph"]
+      analyzers:
+        nodes:
+          type: diagnostic_aggregator/GenericAnalyzer
+          path: Nodes
+          contains: ["/nodes"]
+        continuity:
+          type: diagnostic_aggregator/GenericAnalyzer
+          path: Continuity
+          contains: ["/continuity"]
+        topic_frequency:
+          type: diagnostic_aggregator/AnalyzerGroup
+          path: Topics
+          contains: ['_frequency']
+          analyzers:
+            pub_freq:
+              type: diagnostic_aggregator/GenericAnalyzer
+              path: PublishFrequency
+              contains: ["publish_"]
+            sub_freq:
+              type: diagnostic_aggregator/GenericAnalyzer
+              path: ReceiveFrequency
+              contains: ["receive_"]

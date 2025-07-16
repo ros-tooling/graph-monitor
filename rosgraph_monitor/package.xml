@@ -21,6 +21,8 @@
   <depend>rclcpp_components</depend>
   <depend>rosgraph_monitor_msgs</depend>
 
+  <exec_depend>diagnostic_aggregator</exec_depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gmock</test_depend>

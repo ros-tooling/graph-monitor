@@ -4,8 +4,9 @@
   <name>rmw_stats_shim</name>
   <version>0.1.2</version>
   <description>Partial RMW shim library to instrument RMW API calls</description>
-  <maintainer email="emerson.knapp@bonsairobotics.ai">Bonsai Robotics Engineering</maintainer>
+  <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
   <license>Apache License 2.0</license>
+  <author email="emerson.knapp@bonsairobotics.ai">Emerson Knapp on behalf of Bonsai Robotics</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

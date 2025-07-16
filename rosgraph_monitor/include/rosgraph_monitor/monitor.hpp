@@ -38,31 +38,39 @@
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
-template <> struct std::hash<RosRmwGid> {
-  std::size_t operator()(const RosRmwGid &id) const noexcept;
+template<>
+struct std::hash<RosRmwGid>
+{
+  std::size_t operator()(const RosRmwGid & id) const noexcept;
 };
 
-template <> struct std::hash<std::pair<std::string, std::string>> {
+template<>
+struct std::hash<std::pair<std::string, std::string>>
+{
   std::size_t
-  operator()(const std::pair<std::string, std::string> &value) const noexcept;
+  operator()(const std::pair<std::string, std::string> & value) const noexcept;
 };
 
-namespace rosgraph_monitor {
+namespace rosgraph_monitor
+{
 
 std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE]);
-std::string gid_to_str(const RosRmwGid &gid);
+std::string gid_to_str(const RosRmwGid & gid);
 
-struct GraphMonitorConfiguration {
+struct GraphMonitorConfiguration
+{
   std::string diagnostic_namespace{"Rosgraph"};
 
-  struct NodeChecks {
+  struct NodeChecks
+  {
     // Matching nodes will not be considered in any graph analysis
     std::vector<std::string> ignore_prefixes;
     // Downgrade ERROR to WARN for matching nodes when they are missing.
     std::vector<std::string> warn_only_prefixes;
   } nodes;
 
-  struct ContinuityChecks {
+  struct ContinuityChecks
+  {
     // If set, don't perform any continuity checks
     bool enable = true;
     // These nodes don't count for subscriptions when reporting discontinuity
@@ -74,7 +82,8 @@ struct GraphMonitorConfiguration {
     std::unordered_set<std::string> ignore_topic_names;
   } continuity;
 
-  struct TopicStatisticsChecks {
+  struct TopicStatisticsChecks
+  {
     // What fraction of the promised deadline the topic statistics may err by
     // and still be considered compliant.
     // For example if 0.1, then a deadline of 10 milliseconds will be considered
@@ -90,7 +99,8 @@ struct GraphMonitorConfiguration {
 
 /// @brief Monitors the ROS application graph, providing diagnostics about its
 /// health.
-class RosGraphMonitor {
+class RosGraphMonitor
+{
 public:
   /// @brief Constructor
   /// @param config Includes/excludes the entities to care about in diagnostic
@@ -101,9 +111,9 @@ public:
   /// the ROS graph
   /// @param logger
   RosGraphMonitor(
-      rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
-      std::function<rclcpp::Time()> now_fn, rclcpp::Logger logger,
-      GraphMonitorConfiguration config = GraphMonitorConfiguration{});
+    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
+    std::function<rclcpp::Time()> now_fn, rclcpp::Logger logger,
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
 
   virtual ~RosGraphMonitor();
 
@@ -118,16 +128,16 @@ public:
   bool wait_for_update(std::chrono::milliseconds timeout);
 
   /// @return Mutable reference to the configuration, for updating
-  GraphMonitorConfiguration &config();
+  GraphMonitorConfiguration & config();
 
   /// @return Const reference to configuration
-  const GraphMonitorConfiguration &config() const;
+  const GraphMonitorConfiguration & config() const;
 
   /// @brief Integrate new topic statistics input to determine if topics are
   /// meeting contracts.
   /// @param statistics Incoming statistics list
   void on_topic_statistics(
-      const rosgraph_monitor_msgs::msg::TopicStatistics &statistics);
+    const rosgraph_monitor_msgs::msg::TopicStatistics & statistics);
 
   /// @brief Generate a RosGraph message containing current graph state
   /// @return A message containing current node information and timestamp
@@ -141,20 +151,23 @@ protected:
   /* Types */
 
   /// @brief Keeps flags for tracking observed nodes over time
-  struct NodeTracking {
+  struct NodeTracking
+  {
     bool missing = false;
     bool stale = false;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time
-  struct TopicTracking {
+  struct TopicTracking
+  {
     size_t pubs = 0;
     size_t subs = 0;
   };
 
   /// @brief Keeps information and flags about observed Publishers/Subscriptions
   /// over time
-  struct EndpointTracking {
+  struct EndpointTracking
+  {
     bool stale = false;
     const std::string topic_name;
     const std::string node_name;
@@ -163,9 +176,10 @@ protected:
     rclcpp::Time last_stats_timestamp;
     std::optional<rosgraph_monitor_msgs::msg::TopicStatistic> period_stat;
 
-    EndpointTracking(const std::string &topic_name,
-                     const rclcpp::TopicEndpointInfo &info,
-                     const rclcpp::Time &now);
+    EndpointTracking(
+      const std::string & topic_name,
+      const rclcpp::TopicEndpointInfo & info,
+      const rclcpp::Time & now);
   };
 
   typedef std::map<std::string, std::vector<std::string>> TopicsToTypes;
@@ -185,48 +199,54 @@ protected:
   /// @brief Should we skip tracking this node?
   /// @param node_name
   /// @return Whether to ignore tracking the node
-  bool ignore_node(const std::string &node_name);
+  bool ignore_node(const std::string & node_name);
 
   /// @brief Check current observed state against our tracked state, updating
   /// tracking info
   /// @param observed_node_names
-  void track_node_updates(const std::vector<std::string> &observed_node_names);
+  void track_node_updates(const std::vector<std::string> & observed_node_names);
 
   /// @brief Check current observed state against our tracked state, updating
   /// tracking info
   /// @param observed_topics_and_types
-  void track_endpoint_updates(const TopicsToTypes &observed_topics_and_types);
+  void track_endpoint_updates(const TopicsToTypes & observed_topics_and_types);
 
   /// @return Iterator to existing or added publisher, or nullopt if node
   /// ignored
   std::optional<EndpointTrackingMap::iterator>
-  add_publisher(const std::string &topic_name,
-                const rclcpp::TopicEndpointInfo &info);
+  add_publisher(
+    const std::string & topic_name,
+    const rclcpp::TopicEndpointInfo & info);
 
   /// @return GID of a publisher if found, else nullopt if such an endpoint not
   /// tracked.
   std::optional<RosRmwGid>
-  lookup_publisher(const std::string &node_name,
-                   const std::string &topic_name) const;
+  lookup_publisher(
+    const std::string & node_name,
+    const std::string & topic_name) const;
 
   /// @return Iterator to existing or added publisher, or nullopt if node
   /// ignored
   std::optional<EndpointTrackingMap::iterator>
-  add_subscription(const std::string &topic_name,
-                   const rclcpp::TopicEndpointInfo &info);
+  add_subscription(
+    const std::string & topic_name,
+    const rclcpp::TopicEndpointInfo & info);
 
   /// @return GID of a publisher if found, else nullopt if such an endpoint not
   /// tracked.
   std::optional<RosRmwGid>
-  lookup_subscription(const std::string &node_name,
-                      const std::string &topic_name) const;
+  lookup_subscription(
+    const std::string & node_name,
+    const std::string & topic_name) const;
 
-  bool topic_period_ok(const rosgraph_monitor_msgs::msg::TopicStatistic &stat,
-                       const rclcpp::Duration &deadline) const;
+  bool topic_period_ok(
+    const rosgraph_monitor_msgs::msg::TopicStatistic & stat,
+    const rclcpp::Duration & deadline) const;
 
   diagnostic_msgs::msg::DiagnosticStatus
-  statusMsg(uint8_t level, const std::string &message,
-            const std::string &subname = "") const;
+  statusMsg(
+    uint8_t level, const std::string & message,
+    const std::string & subname = "") const;
 
   /* Members */
 
@@ -235,13 +255,13 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
-  std::function<void()> graph_change_callback_;
 
   // Execution model
   std::atomic_bool shutdown_ = false;
   rclcpp::Event::SharedPtr graph_change_event_;
   std::thread watch_thread_;
   Event update_event_;
+  std::function<void()> graph_change_callback_;
 
   // Graph cache
   std::unordered_map<std::string, NodeTracking> nodes_;
@@ -254,10 +274,10 @@ protected:
   std::unordered_set<std::string> ignored_nodes_;
   std::unordered_set<std::string> returned_nodes_;
   std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
-  std::unordered_set<std::string> pubs_with_no_subs_; // a.k.a. "leaf topics"
-  std::unordered_set<std::string> subs_with_no_pubs_; // a.k.a. "dead sinks"
+  std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
+  std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
 };
 
-} // namespace rosgraph_monitor
+}  // namespace rosgraph_monitor
 
-#endif // ROSGRAPH_MONITOR__MONITOR_HPP_
+#endif  // ROSGRAPH_MONITOR__MONITOR_HPP_

@@ -23,6 +23,7 @@
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 
 #include "rosgraph_monitor/monitor.hpp"
+#include "rosgraph_monitor_msgs/msg/ros_graph.hpp"
 
 using testing::SizeIs;
 using testing::Return;
@@ -412,6 +413,11 @@ TEST_F(GraphMonitorTest, node_liveness)
   check_statuses({ERROR, OK}, "Returned status cleared");
 }
 
+TEST_F(GraphMonitorTest, graph_monitor_pubs)
+{
+  set_node_names({"testy1", "testy2"});
+}
+
 TEST_F(GraphMonitorTest, ignore_nodes)
 {
   graphmon_->config().nodes.ignore_prefixes = {"/ignore"};
@@ -701,4 +707,72 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
   stats.timestamp = rclcpp::Time(10, 0);
   graphmon_->on_topic_statistics(stats);
   check_statuses({OK, OK}, "Endpoint removed and replaced with new, not stale");
+}
+
+TEST_F(GraphMonitorTest, rosgraph_generation)
+{
+  // Set up test nodes
+  set_node_names({"node1", "node2", "node3"});
+  trigger_and_wait();
+
+  // Generate rosgraph message
+  auto rosgraph_msg = graphmon_->generate_rosgraph();
+
+  // Verify the message contains expected nodes
+  ASSERT_NE(rosgraph_msg, nullptr);
+  EXPECT_EQ(rosgraph_msg->nodes.size(), 3);
+
+  // Verify node names are present
+  std::vector<std::string> node_names;
+  for (const auto & node : rosgraph_msg->nodes) {
+    node_names.push_back(node.name);
+  }
+
+  EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
+
+  // Verify timestamp is set (should be current time in test environment)
+  EXPECT_EQ(rosgraph_msg->timestamp, now_);
+}
+
+TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes)
+{
+  // Set up some nodes, including one that should be ignored
+  graphmon_->config().nodes.ignore_prefixes = {"/dummy"};
+  set_node_names({"node1", "node2", "dummy/ignored_node"});
+  trigger_and_wait();
+
+  // Generate rosgraph message
+  auto rosgraph_msg = graphmon_->generate_rosgraph();
+
+  // Verify the message contains only non-ignored nodes
+  ASSERT_NE(rosgraph_msg, nullptr);
+  EXPECT_EQ(rosgraph_msg->nodes.size(), 2);
+
+  // Verify node names are present (should not include ignored node)
+  std::vector<std::string> node_names;
+  for (const auto & node : rosgraph_msg->nodes) {
+    node_names.push_back(node.name);
+  }
+
+  EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2"));
+}
+
+TEST_F(GraphMonitorTest, rosgraph_callback_triggered)
+{
+  // Set up a callback to track when it's called
+  bool callback_called = false;
+  graphmon_->set_graph_change_callback(
+    [&callback_called]() {
+      callback_called = true;
+    });
+
+  // Initially no callback should be called
+  EXPECT_FALSE(callback_called);
+
+  // Set nodes and trigger update
+  set_node_names({"node1", "node2"});
+  trigger_and_wait();
+
+  // Verify callback was called
+  EXPECT_TRUE(callback_called);
 }

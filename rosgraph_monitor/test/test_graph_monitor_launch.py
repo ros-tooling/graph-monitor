@@ -19,14 +19,14 @@ import threading
 import time
 import unittest
 
-import pytest
-import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
+import pytest
+import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from std_msgs.msg import Bool
@@ -45,6 +45,7 @@ def generate_test_description():
 
 
 class TestProcessOutput(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls):
         # Initialize the ROS context for the test node

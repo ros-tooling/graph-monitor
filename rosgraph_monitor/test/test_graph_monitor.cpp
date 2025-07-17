@@ -725,15 +725,15 @@ TEST_F(GraphMonitorTest, rosgraph_generation) {
   trigger_and_wait();
 
   // Generate rosgraph message
-  auto rosgraph_msg = graphmon_->generate_rosgraph();
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
+  graphmon_->fill_rosgraph_msg(rosgraph_msg);
 
   // Verify the message contains expected nodes
-  ASSERT_NE(rosgraph_msg, nullptr);
-  EXPECT_EQ(rosgraph_msg->nodes.size(), 3);
+  EXPECT_EQ(rosgraph_msg.nodes.size(), 3);
 
   // Verify node names are present
   std::vector<std::string> node_names;
-  for (const auto & node : rosgraph_msg->nodes) {
+  for (const auto & node : rosgraph_msg.nodes) {
     node_names.push_back(node.name);
   }
 
@@ -742,7 +742,7 @@ TEST_F(GraphMonitorTest, rosgraph_generation) {
     testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
 
   // Verify timestamp is set (should be current time in test environment)
-  EXPECT_EQ(rosgraph_msg->timestamp, now_);
+  EXPECT_EQ(rosgraph_msg.timestamp, now_);
 }
 
 TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
@@ -752,15 +752,15 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
   trigger_and_wait();
 
   // Generate rosgraph message
-  auto rosgraph_msg = graphmon_->generate_rosgraph();
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
+  graphmon_->fill_rosgraph_msg(rosgraph_msg);
 
   // Verify the message contains only non-ignored nodes
-  ASSERT_NE(rosgraph_msg, nullptr);
-  EXPECT_EQ(rosgraph_msg->nodes.size(), 2);
+  EXPECT_EQ(rosgraph_msg.nodes.size(), 2);
 
   // Verify node names are present (should not include ignored node)
   std::vector<std::string> node_names;
-  for (const auto & node : rosgraph_msg->nodes) {
+  for (const auto & node : rosgraph_msg.nodes) {
     node_names.push_back(node.name);
   }
 

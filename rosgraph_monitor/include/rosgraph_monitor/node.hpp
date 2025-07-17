@@ -21,7 +21,7 @@
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "rclcpp/node.hpp"
-#include "rosgraph_monitor_msgs/msg/ros_graph.hpp"
+#include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
@@ -53,7 +53,7 @@ protected:
   rclcpp::Subscription<rosgraph_monitor_msgs::msg::TopicStatistics>::SharedPtr
     sub_topic_statistics_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
-  rclcpp::Publisher<rosgraph_monitor_msgs::msg::RosGraph>::SharedPtr pub_rosgraph_;
+  rclcpp::Publisher<rosgraph_monitor_msgs::msg::Graph>::SharedPtr pub_rosgraph_;
   rclcpp::TimerBase::SharedPtr timer_publish_report_;
 };
 

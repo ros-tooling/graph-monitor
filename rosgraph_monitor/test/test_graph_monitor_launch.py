@@ -29,7 +29,7 @@ import pytest
 import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_msgs.msg import RosGraph
+from rosgraph_monitor_msgs.msg import Graph
 from std_msgs.msg import Bool
 
 
@@ -133,7 +133,7 @@ class TestProcessOutput(unittest.TestCase):
 
     def test_rosgraph_messages(self):
         rosgraph_sub = self.subscriber_node.create_subscription(
-            RosGraph,
+            Graph,
             '/rosgraph',
             lambda msg: self.rosgraph_msgs.append(msg),
             1)

@@ -733,12 +733,13 @@ TEST_F(GraphMonitorTest, rosgraph_generation) {
 
   // Verify node names are present
   std::vector<std::string> node_names;
-  for (const auto &node : rosgraph_msg->nodes) {
+  for (const auto & node : rosgraph_msg->nodes) {
     node_names.push_back(node.name);
   }
 
-  EXPECT_THAT(node_names,
-              testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
+  EXPECT_THAT(
+    node_names,
+    testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
 
   // Verify timestamp is set (should be current time in test environment)
   EXPECT_EQ(rosgraph_msg->timestamp, now_);
@@ -759,7 +760,7 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
 
   // Verify node names are present (should not include ignored node)
   std::vector<std::string> node_names;
-  for (const auto &node : rosgraph_msg->nodes) {
+  for (const auto & node : rosgraph_msg->nodes) {
     node_names.push_back(node.name);
   }
 

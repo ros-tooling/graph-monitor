@@ -613,5 +613,4 @@ void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
 }
 
 
-
 }  // namespace rosgraph_monitor

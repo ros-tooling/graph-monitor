@@ -29,8 +29,8 @@ import pytest
 import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
-from std_msgs.msg import Bool
 from rosgraph_monitor_msgs.msg import RosGraph
+from std_msgs.msg import Bool
 
 
 @pytest.mark.launch_test

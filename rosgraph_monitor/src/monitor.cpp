@@ -14,6 +14,8 @@
 
 #include "rosgraph_monitor/monitor.hpp"
 
+#include <functional>
+
 #include "rclcpp/logging.hpp"
 
 

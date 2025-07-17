@@ -34,8 +34,6 @@ These health criteria are provided:
 - Graph Continuity: report warnings for publishers or subscriptions that don't have anything listening/sending on the other end
 - [Topic Frequencies](#frequency-checks): interpret `/topic_statistics` to determine whether certain topics aren't going at the expected rate. See following section for more information.
 
-
-
 This also provides a `rosgraph_monitor_node` for standalone use, for users who do not need custom integration of the `RosgraphMonitor` class.
 
 ### Frequency Checks
@@ -71,7 +69,6 @@ ros2 run rosgraph_monitor rosgraph_monitor_node
 See [params_decl.yaml](./src/params_decl.yaml) for the full parameters for the `rosgraph_monitor` Node.
 
 These parameters mirror the structure [`rosgraph_monitor::GraphMonitorConfiguration`](./include/rosgraph_monitor/monitor.hpp#L60), for those using the class directly instead of in the wrapping Node.
-
 
 ## Implementation Tidbits
 

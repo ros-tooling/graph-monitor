@@ -34,8 +34,7 @@ from std_msgs.msg import Bool
 
 
 def wait_for_message(node, message_type, topic, condition_func, timeout_sec=5.0):
-    """
-    Utility function to wait for a message that meets a condition or timeout.
+    """Wait for a message that meets a condition or timeout.
 
     Args:
         node: ROS2 node to use for spinning
@@ -137,7 +136,8 @@ class TestProcessOutput(unittest.TestCase):
     def test_diagnostics(self):
         # Wait for diagnostic message with all OK statuses
         def diagnostic_condition(msg):
-            return len(msg.status) > 0 and all(status.level == DiagnosticStatus.OK for status in msg.status)
+            return (len(msg.status) > 0 and
+                    all(status.level == DiagnosticStatus.OK for status in msg.status))
 
         success, messages = wait_for_message(
             self.subscriber_node,
@@ -157,8 +157,8 @@ class TestProcessOutput(unittest.TestCase):
         # Wait for rosgraph message that contains our publisher node
         def rosgraph_condition(msg):
             return (msg is not None and
-                   len(msg.nodes) > 0 and
-                   any(node.name.startswith('/publisher_node') for node in msg.nodes))
+                    len(msg.nodes) > 0 and
+                    any(node.name.startswith('/publisher_node') for node in msg.nodes))
 
         success, messages = wait_for_message(
             self.subscriber_node,

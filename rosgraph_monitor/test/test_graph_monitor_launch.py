@@ -21,7 +21,6 @@ import unittest
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from launch import LaunchDescription
-from rosgraph_monitor_msgs.msg import RosGraph
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -31,6 +30,7 @@ import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from std_msgs.msg import Bool
+from rosgraph_monitor_msgs.msg import RosGraph
 
 
 @pytest.mark.launch_test

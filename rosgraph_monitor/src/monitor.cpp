@@ -185,6 +185,11 @@ void RosGraphMonitor::track_node_updates(
       returned_nodes_.erase(node_name);
     }
   }
+
+  // Call graph change callback if set
+  if (graph_change_callback_) {
+    graph_change_callback_();
+  }
 }
 
 std::optional<RosGraphMonitor::EndpointTrackingMap::iterator> RosGraphMonitor::add_publisher(
@@ -586,6 +591,27 @@ void RosGraphMonitor::statusWrapper(
     msg.name += "/" + subname;
   }
   msg.hardware_id = "health";
+}
+
+void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
+{
+  msg.timestamp = now_fn_();
+  msg.nodes.clear();
+
+  for (const auto & [node_name, node_info] : nodes_) {
+    if (ignore_node(node_name)) {
+      continue;
+    }
+
+    rosgraph_monitor_msgs::msg::NodeInfo node_msg;
+    node_msg.name = node_name;
+    msg.nodes.push_back(node_msg);
+  }
+}
+
+void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
+{
+  graph_change_callback_ = callback;
 }
 
 

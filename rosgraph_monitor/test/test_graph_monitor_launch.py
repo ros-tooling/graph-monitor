@@ -27,7 +27,54 @@ import pytest
 import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
+from rosgraph_monitor_msgs.msg import Graph
 from std_msgs.msg import Bool
+
+
+def wait_for_message(node, message_type, topic, condition_func, timeout_sec=5.0):
+    """
+    Wait for a message that meets a condition or timeout.
+
+    Args:
+        node: ROS2 node to use for spinning
+        message_type: The message type to subscribe to
+        topic: Topic name to listen on
+        condition_func: Function that takes a message and returns True if condition is met
+        timeout_sec: Maximum time to wait in seconds
+
+    Returns
+    -------
+        tuple: (success: bool, messages: list) - success indicates if condition was met
+
+    """
+    messages = []
+
+    def callback(msg):
+        messages.append(msg)
+
+    subscriber = node.create_subscription(
+        message_type,
+        topic,
+        callback,
+        1  # QoS depth
+    )
+
+    start_time = time.time()
+    end_time = start_time + timeout_sec
+
+    try:
+        while time.time() < end_time:
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+            # Check if any message meets the condition
+            if messages and condition_func(messages[-1]):
+                return True, messages
+
+        # Timeout reached without meeting condition
+        return False, messages
+
+    finally:
+        node.destroy_subscription(subscriber)
 
 
 @pytest.mark.launch_test
@@ -56,9 +103,6 @@ class TestProcessOutput(unittest.TestCase):
 
     def setUp(self):
         # Create a ROS node for tests
-        self.diagnostics = []
-        self.diagnostics_agg_msgs = []
-        self.topic_statistics = []
         self.publisher_node = rclpy.create_node('publisher_node')
         self.subscriber_node = rclpy.create_node('subscriber_node')
 
@@ -71,7 +115,8 @@ class TestProcessOutput(unittest.TestCase):
         else:
             qos = QoSProfile(depth=10)
 
-        self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
+        self.dummy_publisher = self.publisher_node.create_publisher(
+            Bool, '/bool_publisher', qos)
         self.publish_timer = self.publisher_node.create_timer(
             timer_period_sec=0.1, callback=self.publisher_callback)
 
@@ -89,39 +134,43 @@ class TestProcessOutput(unittest.TestCase):
         self.subscriber_node.destroy_node()
         self.publisher_node.destroy_node()
 
-    def test_health_monitor_diagnostics(self):
-        sub = self.subscriber_node.create_subscription(
+    def test_diagnostics(self):
+        # Wait for diagnostic message with all OK statuses
+        def diagnostic_condition(msg):
+            return (len(msg.status) > 0 and
+                    all(status.level == DiagnosticStatus.OK for status in msg.status))
+
+        success, messages = wait_for_message(
+            self.subscriber_node,
             DiagnosticArray,
             '/diagnostics_agg',
-            lambda msg: self.diagnostics_agg_msgs.append(msg),
-            QoSProfile(depth=1),
+            diagnostic_condition,
+            timeout_sec=5.0
         )
 
-        end_time = time.time() + 5
-        while time.time() < end_time:
-            rclpy.spin_once(self.publisher_node, timeout_sec=0.1)
-
-        self.assertGreater(
-            len(self.diagnostics_agg_msgs),
-            0,
-            'Should have received at least one /diagnostics_agg message',
-        )
-
-        last_msg = self.diagnostics_agg_msgs.pop(-1)
         self.assertTrue(
-            all(status.level == DiagnosticStatus.OK for status in last_msg.status),
-            f'All diagnostic statuses should be healthy: {last_msg}',
+            success,
+            f'Should have received at least one /diagnostics_agg message with all OK statuses. '
+            f'Received {len(messages)} messages.'
         )
 
-        self.subscriber_node.destroy_subscription(sub)
-        self.assertGreater(
-            len(self.diagnostics_agg_msgs),
-            0,
-            'Should have received at least one more /diagnostics_agg message',
+    def test_rosgraph_messages(self):
+        # Wait for rosgraph message that contains our publisher node
+        def rosgraph_condition(msg):
+            return (msg is not None and
+                    len(msg.nodes) > 0 and
+                    any(node.name.startswith('/publisher_node') for node in msg.nodes))
+
+        success, messages = wait_for_message(
+            self.subscriber_node,
+            Graph,
+            '/rosgraph',
+            rosgraph_condition,
+            timeout_sec=5.0
         )
 
-        last_msg = self.diagnostics_agg_msgs.pop(-1)
         self.assertTrue(
-            all(status.level == DiagnosticStatus.OK for status in last_msg.status),
-            f'All diagnostic statuses should be healthy: {last_msg}',
+            success,
+            f'Should have received at least one /rosgraph message containing publisher_node. '
+            f'Received {len(messages)} messages.'
         )

@@ -32,6 +32,7 @@
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
+#include "rosgraph_monitor_msgs/msg/graph.hpp"
 
 #include "rosgraph_monitor/event.hpp"
 
@@ -136,6 +137,13 @@ public:
   /// @param statistics Incoming statistics list
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & statistics);
 
+  /// @brief Fill a Graph message containing current graph state
+  void fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg);
+
+  /// @brief Set callback function to be called when graph changes
+  /// @param callback Function to call when graph updates occur
+  void set_graph_change_callback(std::function<void()> callback);
+
 protected:
   /* Types */
 
@@ -236,6 +244,7 @@ protected:
   rclcpp::Event::SharedPtr graph_change_event_;
   std::thread watch_thread_;
   Event update_event_;
+  std::function<void()> graph_change_callback_;
 
   // Graph cache
   std::unordered_map<std::string, NodeTracking> nodes_;

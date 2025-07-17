@@ -21,6 +21,7 @@
 
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
+#include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
@@ -76,12 +77,23 @@ Node::Node(const rclcpp::NodeOptions & options)
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics",
       10)),
+  pub_rosgraph_(
+    create_publisher<rosgraph_monitor_msgs::msg::Graph>(
+      "/rosgraph",
+      rclcpp::QoS(1).transient_local().reliable())),
+
   timer_publish_report_(
     create_wall_timer(
       std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
       std::bind(&Node::publish_diagnostics, this)))
 {
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
+
+  // Set up callback to publish rosgraph when nodes change
+  graph_monitor_.set_graph_change_callback(std::bind(&Node::publish_rosgraph, this));
+
+  // Publish initial rosgraph state
+  publish_rosgraph();
 }
 
 void Node::update_params(const rosgraph_monitor::Params & params)
@@ -104,6 +116,13 @@ void Node::publish_diagnostics()
   graph_monitor_.evaluate(diagnostic_array->status);
 
   pub_diagnostics_->publish(std::move(diagnostic_array));
+}
+
+void Node::publish_rosgraph()
+{
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
+  graph_monitor_.fill_rosgraph_msg(rosgraph_msg);
+  pub_rosgraph_->publish(std::move(rosgraph_msg));
 }
 
 }  // namespace rosgraph_monitor

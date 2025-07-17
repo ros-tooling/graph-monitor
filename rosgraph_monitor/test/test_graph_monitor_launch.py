@@ -174,3 +174,29 @@ class TestProcessOutput(unittest.TestCase):
             f'Should have received at least one /rosgraph message containing publisher_node. '
             f'Received {len(messages)} messages.'
         )
+
+    def test_rosgraph_messages(self):
+        rosgraph_sub = self.subscriber_node.create_subscription(
+            RosGraph,
+            '/rosgraph',
+            lambda msg: self.rosgraph_msgs.append(msg),
+            1)
+
+        end_time = time.time() + 5
+        while time.time() < end_time:
+            rclpy.spin_once(self.publisher_node, timeout_sec=0.1)
+
+        self.assertGreater(
+            len(self.rosgraph_msgs),
+            0, 'There should be at least one /rosgraph message')
+
+        last_msg = self.rosgraph_msgs[-1]
+        self.assertIsNotNone(
+            last_msg, 'Last rosgraph message should not be None')
+
+        self.assertTrue(any(
+            node.name.startswith('/publisher_node')
+            for node in last_msg.nodes),
+            'Node info should contain publisher_node details')
+
+        self.subscriber_node.destroy_subscription(rosgraph_sub)

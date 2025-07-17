@@ -26,7 +26,8 @@
 #include <utility>
 #include <vector>
 
-#include "diagnostic_msgs/msg/diagnostic_array.hpp"
+#include "diagnostic_msgs/msg/diagnostic_status.hpp"
+#include "diagnostic_updater/diagnostic_status_wrapper.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
@@ -59,7 +60,7 @@ std::string gid_to_str(const RosRmwGid & gid);
 
 struct GraphMonitorConfiguration
 {
-  std::string diagnostic_namespace{"Rosgraph"};
+  std::string diagnostic_namespace{"rosgraph"};
 
   struct NodeChecks
   {
@@ -92,6 +93,11 @@ struct GraphMonitorConfiguration
     // For topics whose frequency is tracked, if new statistics are not received within this
     // time frame then the statistic will be reported as stale with an ERROR.
     std::chrono::milliseconds stale_timeout{3000};
+    // List of topics that must exist and have deadlines
+    std::unordered_set<std::string> mandatory_topics;
+    // List of topics that should not be considered for frequency checks
+    // (e.g. topics that are known to be misconfigured and not meeting their deadlines
+    std::unordered_set<std::string> ignore_topics;
   } topic_statistics;
 };
 
@@ -114,7 +120,7 @@ public:
 
   /// @brief Return diagnostics of latest graph understanding
   /// @return A message filled with all current conditions. May be empty array, but never nullptr
-  std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> evaluate();
+  void evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatus> & status);
 
   /// @brief Wait until next graph update is integrated into the monitor
   /// @param timeout
@@ -220,10 +226,11 @@ protected:
     const rosgraph_monitor_msgs::msg::TopicStatistic & stat,
     const rclcpp::Duration & deadline) const;
 
-  diagnostic_msgs::msg::DiagnosticStatus statusMsg(
+  void statusWrapper(
+    diagnostic_updater::DiagnosticStatusWrapper & msg,
     uint8_t level,
     const std::string & message,
-    const std::string & subname = "") const;
+    const std::string & subname) const;
 
   /* Members */
 

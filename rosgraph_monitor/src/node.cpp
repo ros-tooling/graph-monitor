@@ -49,6 +49,8 @@ GraphMonitorConfiguration Node::create_graph_monitor_config(
   gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
   gconf.topic_statistics.stale_timeout =
     std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
+  gconf.topic_statistics.mandatory_topics = vec_to_set(gparms.topic_statistics.mandatory_topics);
+  gconf.topic_statistics.ignore_topics = vec_to_set(gparms.topic_statistics.ignore_topics);
   return gconf;
 }
 
@@ -70,6 +72,7 @@ Node::Node(const rclcpp::NodeOptions & options)
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics",
       10)),
+<<<<<<< HEAD
   pub_diagnostic_agg_(
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics_agg",
@@ -84,12 +87,15 @@ Node::Node(const rclcpp::NodeOptions & options)
       rclcpp::QoS{1}
       .durability(rclcpp::DurabilityPolicy::TransientLocal)
       .reliability(rclcpp::ReliabilityPolicy::Reliable))),
+=======
+>>>>>>> faff065c91c55ac49f9e4af1bd379232421f7d3c
   timer_publish_report_(
     create_wall_timer(
       std::chrono::milliseconds(params_.diagnostics_publish_period_ms),
       std::bind(&Node::publish_diagnostics, this)))
 {
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
+<<<<<<< HEAD
   graph_analyzer_.init("/Health", params_.graph_analyzer);
 
   // Set up callback to publish rosgraph when nodes change
@@ -97,6 +103,8 @@ Node::Node(const rclcpp::NodeOptions & options)
 
   // Publish initial rosgraph state
   publish_rosgraph();
+=======
+>>>>>>> faff065c91c55ac49f9e4af1bd379232421f7d3c
 }
 
 void Node::update_params(const rosgraph_monitor::Params & params)
@@ -112,28 +120,12 @@ void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics
 
 void Node::publish_diagnostics()
 {
-  auto diagnostic_array = graph_monitor_.evaluate();
+  auto diagnostic_array = std::make_unique<diagnostic_msgs::msg::DiagnosticArray>();
+  diagnostic_array->header.stamp = get_clock()->now();
+  diagnostic_array->header.frame_id = "rosgraph_monitor";
 
-  // TODO(ek) probably possible & cleaner to implement using DiagnosticAggregator with Analyzers
-  // Evaluate all diagnostics into final aggregated set for reporting
-  for (const auto & status : diagnostic_array->status) {
-    if (graph_analyzer_.match(status.name)) {
-      auto item = std::make_shared<diagnostic_aggregator::StatusItem>(&status);
-      graph_analyzer_.analyze(item);
-    }
-  }
-  auto agg_statuses = graph_analyzer_.report();
+  graph_monitor_.evaluate(diagnostic_array->status);
 
-  // Evaluate aggregated diagnostics into one single toplevel status "result"
-  auto diagnostic_toplevel = *agg_statuses[0];
-  diagnostic_msgs::msg::DiagnosticArray diagnostic_agg;
-  diagnostic_agg.header.stamp = get_clock()->now();
-  for (const auto & status : agg_statuses) {
-    diagnostic_agg.status.push_back(*status);
-  }
-  // Publish both the aggregated statuses and the result
-  pub_diagnostic_agg_->publish(diagnostic_agg);
-  pub_diagnostic_toplevel_->publish(diagnostic_toplevel);
   pub_diagnostics_->publish(std::move(diagnostic_array));
 }
 

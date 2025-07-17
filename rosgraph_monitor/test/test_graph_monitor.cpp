@@ -19,6 +19,7 @@
 #include <optional>
 #include <string_view>
 
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gmock/gmock.h"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 
@@ -26,14 +27,6 @@
 
 using testing::SizeIs;
 using testing::Return;
-
-
-static bool ends_with(std::string_view str, std::string_view suffix)
-{
-  return
-    str.size() >= suffix.size() &&
-    str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
 
 
 class MockGraph : public rclcpp::node_interfaces::NodeGraphInterface
@@ -344,35 +337,40 @@ protected:
   static const auto WARN = diagnostic_msgs::msg::DiagnosticStatus::WARN;
   static const auto ERROR = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
   static const auto STALE = diagnostic_msgs::msg::DiagnosticStatus::STALE;
-  struct StatusCheck
-  {
-    uint8_t level;
-    std::optional<std::string> name_suffix;
+  const std::string nodes_diagnostic = "rosgraph/nodes";
+  const std::string continuity_diagnostic = "rosgraph/continuity";
+  const std::string pub_freq_diagnostic = "rosgraph/publish_frequency";
+  const std::string sub_freq_diagnostic = "rosgraph/receive_frequency";
 
-    StatusCheck(
-      uint8_t level,
-      std::optional<std::string> name_suffix = std::nullopt)
-    : level(level),
-      name_suffix(name_suffix)
-    {}
-  };
-
-  void check_statuses(
-    std::vector<StatusCheck> expectations,
-    std::string testname)
+  /// @brief Evaluate the current graph monitoring status, look for the given diagnostic name,
+  ///  and assert it matches expectations
+  /// @param diagnostic_name Full name of the diagnostic to look at, ignore others
+  /// @param level Expected level that diagnostic should be at
+  /// @param maybe_message_pattern Optional string used to make a regex match against the message
+  ///   if nullopt, message is not checked
+  void
+  check_status(
+    const std::string & diagnostic_name,
+    const uint8_t level,
+    std::optional<std::string> maybe_message_pattern = std::nullopt)
   {
-    auto msg = graphmon_->evaluate();
-    auto repr = diagnostic_msgs::msg::to_yaml(*msg);
-    ASSERT_THAT(msg->status, SizeIs(expectations.size())) << repr << testname;
-    for (size_t i = 0; i < expectations.size(); i++) {
-      auto & actual = msg->status[i];
-      auto & expect = expectations[i];
-      EXPECT_EQ(
-        actual.level,
-        static_cast<uint8_t>(expect.level)) << repr << testname;
-      if (expect.name_suffix) {
-        EXPECT_TRUE(ends_with(actual.name, *expect.name_suffix)) << repr << testname;
-      }
+    diagnostic_msgs::msg::DiagnosticArray msg;
+    graphmon_->evaluate(msg.status);
+    auto it =
+      std::find_if(
+      msg.status.begin(), msg.status.end(), [&diagnostic_name](const auto & status) {
+        return status.name == diagnostic_name;
+      });
+    ASSERT_NE(it, msg.status.end()) << "Expected diagnostic " << diagnostic_name << " not present";
+
+    EXPECT_EQ(it->level, level);
+    if (maybe_message_pattern) {
+      std::regex message_re{*maybe_message_pattern};
+      EXPECT_TRUE(
+        std::regex_search(
+          it->message,
+          message_re)) << "Message '" << it->message << "' does not match regex R'" <<
+        *maybe_message_pattern << "'";
     }
   }
 
@@ -388,52 +386,60 @@ protected:
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
+#define CHECK_STATUS(message, ...) {SCOPED_TRACE(message); check_status(__VA_ARGS__);}
 
 TEST_F(GraphMonitorTest, node_liveness)
 {
+  const auto & name = nodes_diagnostic;
   std::vector<std::string> both_nodes = {"testy1", "testy2"};
   std::vector<std::string> one_node = {"testy1"};
   std::vector<std::string> no_nodes;
 
   set_node_names(both_nodes);
   set_node_names(one_node);
-  check_statuses({ERROR}, "First node missing");
+  CHECK_STATUS("One node gone missing", name, ERROR);
+
   // Returned
   set_node_names(both_nodes);
-  check_statuses({OK}, "First node returned");
+  CHECK_STATUS("Missing node returned", name, OK);
 
   // Both down
   set_node_names(no_nodes);
-  check_statuses({ERROR, ERROR}, "Both nodes down");
+  CHECK_STATUS("Both nodes missing", name, ERROR, "^2 required node");
 
   // One returned
   set_node_names(one_node);
-  check_statuses({ERROR, OK}, "One of two node returned");
-  check_statuses({ERROR, OK}, "Returned status cleared");
+  CHECK_STATUS("One missing node returned", name, ERROR, "^1 required node");
 }
 
 TEST_F(GraphMonitorTest, ignore_nodes)
 {
+  const auto & name = nodes_diagnostic;
   graphmon_->config().nodes.ignore_prefixes = {"/ignore"};
+
   set_node_names({"ignore", "not_ignore"});
   set_node_names({"not_ignore"});
-  check_statuses({}, "Ok if ignored node is down");
+  CHECK_STATUS("Okay if ignored node is down", name, OK);
 
   set_node_names({"ignore", "ignore234"});
   set_node_names({});
-  check_statuses({ERROR}, "Not_ignore went down");
+  CHECK_STATUS("not_ignore went down", name, ERROR);
 }
 
 TEST_F(GraphMonitorTest, warn_nodes)
 {
+  const auto & name = nodes_diagnostic;
   graphmon_->config().nodes.warn_only_prefixes = {"/not_important"};
+
   set_node_names({"important", "not_important", "not_important_2"});
   set_node_names({"important"});
-  check_statuses({WARN, WARN}, "Warn-only node only warns when missing");
+  CHECK_STATUS("Warn-only node warns when missing", name, WARN);
 }
 
 TEST_F(GraphMonitorTest, endpoint_continuity)
 {
+  const auto & name = continuity_diagnostic;
+
   set_node_names({default_node_name_});
   // /topic1 has pub and sub
   auto pub1 = add_pub("/topic1", "type1");
@@ -444,57 +450,62 @@ TEST_F(GraphMonitorTest, endpoint_continuity)
   add_sub("/topic3", "type3");
   trigger_and_wait();
 
-  check_statuses({WARN, WARN}, "Two disconnected");
+  CHECK_STATUS("Two disconnected", name, WARN);
 
   // Connect /topic2
   add_sub("/topic2", "type2");
   trigger_and_wait();
-  check_statuses({OK, WARN}, "One reconnected");
+  CHECK_STATUS("One reconnected", name, WARN);
 
   // Connect /topic3
   add_pub("/topic3", "type3");
   trigger_and_wait();
-  check_statuses({OK}, "Second reconnected");
+  CHECK_STATUS("Second reconnected", name, OK);
 
   // Disconnect something that was connected
   remove_endpoint(pub1);
   trigger_and_wait();
-  check_statuses({WARN}, "Became disconnected");
+  CHECK_STATUS("Became disconnected", name, WARN);
 
   // Remove the last endpoint on a topic, no longer a discontinuity
   remove_endpoint(sub1);
   trigger_and_wait();
-  check_statuses({}, "Topic no longer exists");
+  CHECK_STATUS("Topic no longer exists", name, OK);
 }
 
 TEST_F(GraphMonitorTest, endpoint_continuity_ignored_subbernode_pub)
 {
+  const auto & name = continuity_diagnostic;
   graphmon_->config().continuity.ignore_subscriber_nodes = {"/ignore_subber"};
   set_node_names({"ignore_subber", "regular"});
   add_pub("/topic", "type", "ignore_subber");
   trigger_and_wait();
-  check_statuses({WARN}, "Ignored subber's pub still discontinuous");
+  CHECK_STATUS("Ignored sub's pub still discontinuous", name, WARN);
 
   add_sub("/topic", "type", "regular");
   trigger_and_wait();
-  check_statuses({OK}, "Ignore subber's pub got matched up");
+  CHECK_STATUS("Ignore subber's pub got matched up", name, OK);
 }
 
 TEST_F(GraphMonitorTest, endpoint_continuity_ignored_subbernode_sub)
 {
+  const auto & name = continuity_diagnostic;
+
   graphmon_->config().continuity.ignore_subscriber_nodes = {"/ignore_subber"};
   set_node_names({"ignore_subber", "regular"});
   add_sub("/topic", "type", "ignore_subber");
   trigger_and_wait();
-  check_statuses({}, "Ignore subber unmet subscription is fine");
+  CHECK_STATUS("Ignore subber unmet subscription is fine", name, OK);
 
   add_pub("/topic", "type", "regular");
   trigger_and_wait();
-  check_statuses({WARN}, "Regular's pub is discontinuous since subscriber's node ignored.");
+  CHECK_STATUS("Regular's pub is discontinuous since subscriber's node ignored.", name, WARN);
 }
 
 TEST_F(GraphMonitorTest, endpoint_continuity_ignore_topic_types)
 {
+  const auto & name = continuity_diagnostic;
+
   std::string ignore_type1 = "debug_msgs::msg::Debug";
   std::string ignore_type2 = "visualiser_msgs::msg::Vizz";
   graphmon_->config().continuity.ignore_topic_types = {ignore_type1, ignore_type2};
@@ -502,11 +513,13 @@ TEST_F(GraphMonitorTest, endpoint_continuity_ignore_topic_types)
   add_pub("/topic1", ignore_type1);
   add_sub("/topic2", ignore_type2);
   trigger_and_wait();
-  check_statuses({}, "Ignored topic types not reported disconnected.");
+  CHECK_STATUS("Ignored topic types not reported disconnected.", name, OK);
 }
 
 TEST_F(GraphMonitorTest, endpoint_continuity_ignore_topic_names)
 {
+  const auto & name = continuity_diagnostic;
+
   std::string ignore_topic1 = "/some_debug_topic";
   std::string ignore_topic2 = "/other_debug_topic";
   graphmon_->config().continuity.ignore_topic_names = {ignore_topic1, ignore_topic2};
@@ -514,7 +527,7 @@ TEST_F(GraphMonitorTest, endpoint_continuity_ignore_topic_names)
   add_pub(ignore_topic1, "type");
   add_sub(ignore_topic2, "type");
   trigger_and_wait();
-  check_statuses({}, "Ignored topic names not reported disconnected");
+  CHECK_STATUS("Ignored topic names not reported disconnected", name, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_no_deadline_dont_care)
@@ -526,7 +539,12 @@ TEST_F(GraphMonitorTest, topic_frequency_no_deadline_dont_care)
   add_sub("/topic1", "type1", default_node_name_, cyclone_received_qos);
   trigger_and_wait();
   now_ = rclcpp::Time(5, 0, RCL_ROS_TIME);
-  check_statuses({}, "Topic with no deadline reports nothing based on topic stats");
+  CHECK_STATUS(
+    "Publisher with no deadline reports no frequency diagnostic", pub_freq_diagnostic,
+    OK);
+  CHECK_STATUS(
+    "Subscription to no deadline reports no frequency diagnostic", sub_freq_diagnostic,
+    OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_happy)
@@ -547,11 +565,8 @@ TEST_F(GraphMonitorTest, topic_frequency_happy)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(11)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses(
-  {
-    StatusCheck(OK, "PublishFrequency::/topic1"),
-    StatusCheck(OK, "ReceiveFrequency::/topic1"),
-  }, "Topic with deadline but good topic stats, no diagnostic");
+  CHECK_STATUS("Publisher with good topic stats", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription with good topic stats", sub_freq_diagnostic, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_slow)
@@ -572,7 +587,8 @@ TEST_F(GraphMonitorTest, topic_frequency_slow)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(15)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses({WARN, WARN}, "Topic with deadline sending and receiving too slow");
+  CHECK_STATUS("Publisher sending too slow", pub_freq_diagnostic, WARN);
+  CHECK_STATUS("Subscription receiving from too slow pub", sub_freq_diagnostic, WARN);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_fast)
@@ -593,11 +609,8 @@ TEST_F(GraphMonitorTest, topic_frequency_fast)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(8)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses(
-  {
-    StatusCheck(OK, "PublishFrequency::/topic1"),
-    StatusCheck(OK, "ReceiveFrequency::/topic1")
-  }, "Topic with deadline sending and receiving faster is fine");
+  CHECK_STATUS("Publisher sending fast is fine", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription receiving fast is fine", sub_freq_diagnostic, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_tx_good_rx_bad)
@@ -618,11 +631,8 @@ TEST_F(GraphMonitorTest, topic_frequency_tx_good_rx_bad)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(20)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses(
-  {
-    StatusCheck(OK, "PublishFrequency::/topic1"),
-    StatusCheck(WARN, "ReceiveFrequency::/topic1")
-  }, "Topic with deadline sending fine but receiving too slow");
+  CHECK_STATUS("Publisher sending fine", pub_freq_diagnostic, OK);
+  CHECK_STATUS("But the subscription is receiving too slowly", sub_freq_diagnostic, WARN);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_tx_bad_rx_good)
@@ -643,11 +653,11 @@ TEST_F(GraphMonitorTest, topic_frequency_tx_bad_rx_good)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses(
-  {
-    StatusCheck(OK, "PublishFrequency::/topic1"),
-    StatusCheck(OK, "ReceiveFrequency::/topic1")
-  }, "Confusing case! Topic with deadline sending too fast but receiving at correct");
+
+  CHECK_STATUS("Publisher sending faster than deadline is OK", pub_freq_diagnostic, OK);
+  CHECK_STATUS(
+    "Subscription receiving slower than sent, but still within deadline",
+    sub_freq_diagnostic, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_not_received)
@@ -661,10 +671,12 @@ TEST_F(GraphMonitorTest, topic_frequency_not_received)
   trigger_and_wait();
 
   now_ = rclcpp::Time(101, 0, RCL_ROS_TIME);
-  check_statuses({}, "Discovered topics 1 second ago, should not be stale yet.");
+  CHECK_STATUS("Publisher stats not stale yet", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription stats not stale yet", sub_freq_diagnostic, OK);
 
   now_ = rclcpp::Time(104, 0, RCL_ROS_TIME);
-  check_statuses({ERROR, ERROR}, "Enough time has passed to call topic stats stale");
+  CHECK_STATUS("Publisher stats stale", pub_freq_diagnostic, ERROR);
+  CHECK_STATUS("Subscription stats stale", sub_freq_diagnostic, ERROR);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_stale)
@@ -685,14 +697,17 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
     make_stat(
       rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
   graphmon_->on_topic_statistics(stats);
-  check_statuses({OK, OK}, "Deadline topic sending and receiving good");
+  CHECK_STATUS("Publisher stats fine", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription stats fine", sub_freq_diagnostic, OK);
 
   now_ = rclcpp::Time(5, 0, RCL_ROS_TIME);
-  check_statuses({ERROR, ERROR}, "Previously OK topic stats now stale");
+  CHECK_STATUS("Publisher stats now stale", pub_freq_diagnostic, ERROR);
+  CHECK_STATUS("Subscription stats now stale", sub_freq_diagnostic, ERROR);
 
   stats.timestamp = rclcpp::Time(4, 0);
   graphmon_->on_topic_statistics(stats);
-  check_statuses({OK, OK}, "Previously stale topic now refreshed and OK");
+  CHECK_STATUS("Previously stale publisher stats back", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Previously stale subscription stats back", sub_freq_diagnostic, OK);
 
   remove_endpoint(pub);
   auto new_pub = add_pub(default_topic_name_, topic_type, default_node_name_, qos);
@@ -700,5 +715,6 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
   now_ = rclcpp::Time(10, 0, RCL_ROS_TIME);
   stats.timestamp = rclcpp::Time(10, 0);
   graphmon_->on_topic_statistics(stats);
-  check_statuses({OK, OK}, "Endpoint removed and replaced with new, not stale");
+  CHECK_STATUS("Publisher removed and replaced, not stale", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription removed and replaced, not stale", sub_freq_diagnostic, OK);
 }

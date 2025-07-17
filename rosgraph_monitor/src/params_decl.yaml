@@ -8,7 +8,7 @@ rosgraph_monitor:
     diagnostic_namespace:
       type: string
       description: Namespace to put up front of generated diagnostics
-      default_value: Rosgraph
+      default_value: rosgraph
     nodes:
       ignore_prefixes:
         type: string_array
@@ -18,6 +18,8 @@ rosgraph_monitor:
           - /dummy  # from foxglove_bridge
           - /launch_ros_  # helpers for lifecycle nodes in launch
           - /transform_listener_impl_  # ephemeral nodes created by TF
+          - /rqt_
+          - /rviz_
       warn_only_prefixes:
         type: string_array
         description: If node FQN starts with any of these prefixes, downgrade ERROR to WARN when missing
@@ -55,21 +57,11 @@ rosgraph_monitor:
         type: int
         description: Maximum period to receive updated statistics for a topic before an error is raised that it is missing
         default_value: 3000
-  graph_analyzer:
-    diagnostic_prefix:
-      type: string
-      description: Prefix on diagnostics to match
-      default_value: "Rosgraph::"
-      read_only: true
-    mandatory_frequency_topics:
-      type: string_array
-      description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.
-      default_value: []
-    ignore_deadline_topics:
-      type: string_array
-      description: Topics with a deadline whose frequency should not be considered for health outcomes (escape hatch for known bad design/implementation)
-      default_value: []
-    all_nodes_required:
-      type: bool
-      description: Whether it should be considered an error for any node to be reported as missing from the monitor
-      default_value: true
+      mandatory_topics:
+        type: string_array
+        description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.
+        default_value: []
+      ignore_topics:
+        type: string_array
+        description: Topics with a deadline whose frequency should not be considered for health outcomes (escape hatch for known bad design/implementation)
+        default_value: []

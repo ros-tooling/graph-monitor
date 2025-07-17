@@ -350,70 +350,71 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
   }
 }
 
-std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate()
+void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatus> & status)
 {
-  auto now = now_fn_();
-  auto msg = std::make_unique<diagnostic_msgs::msg::DiagnosticArray>();
-  msg->header.stamp = now;
-
   using diagnostic_msgs::msg::DiagnosticStatus;
 
+  auto now = now_fn_();
+
   // Nodes
-  for (const auto & [node_name, node_info] : nodes_) {
-    if (node_info.missing) {
-      if (match_any_prefixes(config_.nodes.warn_only_prefixes, node_name)) {
-        msg->status.push_back(
-          statusMsg(
-            DiagnosticStatus::WARN,
-            "Optional node missing: " + node_name,
-            "Node::" + node_name));
-      } else {
-        msg->status.push_back(
-          statusMsg(
-            DiagnosticStatus::ERROR,
-            "Required node missing: " + node_name,
-            "Node::" + node_name));
+  {
+    diagnostic_updater::DiagnosticStatusWrapper nodes_status;
+    statusWrapper(nodes_status, DiagnosticStatus::OK, "Nodes OK", "nodes");
+    size_t missing_optional_nodes = 0;
+    size_t missing_required_nodes = 0;
+    for (const auto & [node_name, node_info] : nodes_) {
+      if (node_info.missing) {
+        if (match_any_prefixes(config_.nodes.warn_only_prefixes, node_name)) {
+          nodes_status.add("Optional node missing", node_name);
+          missing_optional_nodes++;
+        } else {
+          nodes_status.add("Required node missing", node_name);
+          missing_required_nodes++;
+        }
       }
     }
-  }
-  for (const std::string & node_name : returned_nodes_) {
-    msg->status.push_back(
-      statusMsg(
-        DiagnosticStatus::OK,
-        "Node OK: " + node_name,
-        "Node::" + node_name));
+    for (const std::string & node_name : returned_nodes_) {
+      nodes_status.addf("Node came back: %s", node_name.c_str());
+    }
+    if (missing_required_nodes > 0) {
+      nodes_status.summaryf(
+        DiagnosticStatus::ERROR, "%d required node(s) missing.", missing_required_nodes);
+    }
+    if (missing_optional_nodes > 0) {
+      nodes_status.mergeSummaryf(
+        DiagnosticStatus::WARN, "%d optional node(s) missing.", missing_optional_nodes);
+    }
+    status.push_back(nodes_status);
   }
 
   // Continuity
-  for (const auto & [topic_name, counts] : topic_endpoint_counts_) {
-    if (counts.pubs > 0 && subs_with_no_pubs_.erase(topic_name) > 0) {
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::OK,
-          "Dead sink: cleared. Topic now has publisher(s)",
-          "Continuity::" + topic_name));
+  {
+    diagnostic_updater::DiagnosticStatusWrapper continuity_status;
+    statusWrapper(continuity_status, DiagnosticStatus::OK, "Graph continuity OK", "continuity");
+    for (const auto & [topic_name, counts] : topic_endpoint_counts_) {
+      if (counts.pubs > 0 && subs_with_no_pubs_.erase(topic_name) > 0) {
+        continuity_status.add("Dead sink cleared. Topic now has publisher(s).", topic_name);
+      }
+      if (counts.subs > 0 && pubs_with_no_subs_.erase(topic_name) > 0) {
+        continuity_status.add("Leaf topic cleared. Topic now has subscriber(s).", topic_name);
+      }
     }
-    if (counts.subs > 0 && pubs_with_no_subs_.erase(topic_name) > 0) {
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::OK,
-          "Leaf topic: cleared. Topic now has subscriber(s)",
-          "Continuity::" + topic_name));
+    size_t continuity_issues = 0;
+    for (const auto & topic_name : pubs_with_no_subs_) {
+      continuity_status.add("Leaf topic (No subscriptions): Topic", topic_name);
+      continuity_issues++;
     }
-  }
-  for (const auto & topic_name : pubs_with_no_subs_) {
-    msg->status.push_back(
-      statusMsg(
+    for (const auto & topic_name : subs_with_no_pubs_) {
+      continuity_status.add("Dead sink (No publishers): Topic", topic_name);
+      continuity_issues++;
+    }
+    if (continuity_issues > 0) {
+      continuity_status.summaryf(
         DiagnosticStatus::WARN,
-        "Leaf topic (No subscriptions)",
-        "Continuity::" + topic_name));
-  }
-  for (const auto & topic_name : subs_with_no_pubs_) {
-    msg->status.push_back(
-      statusMsg(
-        DiagnosticStatus::WARN,
-        "Dead sink (No publishers)",
-        "Continuity::" + topic_name));
+        "%d continuity issues detected.",
+        continuity_issues);
+    }
+    status.push_back(continuity_status);
   }
 
   // Frequency
@@ -421,69 +422,93 @@ std::unique_ptr<diagnostic_msgs::msg::DiagnosticArray> RosGraphMonitor::evaluate
       return rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_INFINITE) ||
              rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_UNSPECIFIED);
     };
+  {
+    diagnostic_updater::DiagnosticStatusWrapper pub_freq_status;
+    statusWrapper(
+      pub_freq_status, DiagnosticStatus::OK, "Publish frequencies OK", "publish_frequency");
 
-  for (const auto & [gid, tracking] : publishers_) {
-    auto deadline = tracking.info.qos_profile().deadline();
-    const std::string subname = "PublishFrequency::" + tracking.topic_name;
-    bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
-    if (deadline_not_set(deadline)) {
-      // No deadline, don't care
-    } else if (stale) {
-      // Haven't received topic statistics recently enough, likely this means it's not running
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::ERROR,
-          "Stale topic statistics for publisher with deadline",
-          subname));
-    } else if (!tracking.period_stat.has_value()) {
-      // Not stale yet, but also not yet received statistics info. Just waiting.
-    } else if (!topic_period_ok(*tracking.period_stat, deadline)) {
-      // Have received topic stats and it isn't in good range
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::WARN,
-          "Publisher sending slower than promised deadline",
-          subname));
-    } else {
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::OK,
-          "Publisher send frequency acceptable",
-          subname));
-    }
-  }
-  for (const auto & [gid, tracking] : subscriptions_) {
-    auto deadline = tracking.info.qos_profile().deadline();
-    const std::string subname = "ReceiveFrequency::" + tracking.topic_name;
-    bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
-    if (deadline_not_set(deadline)) {
-      // No deadline, don't care
-    } else if (stale) {
-      // Haven't received topic statistics recently enough, likely this means it's not running
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::ERROR,
-          "Stale topic statistics for subscription with deadline",
-          subname));
-    } else if (!tracking.period_stat.has_value()) {
-      // Not stale yet, but also not yet received statistics info. Just waiting.
-    } else if (!topic_period_ok(*tracking.period_stat, deadline)) {
-      // Have received topic stats and it isn't in good range
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::WARN,
-          "Subscription receiving slower than requested deadline",
-          subname));
-    } else {
-      msg->status.push_back(
-        statusMsg(
-          DiagnosticStatus::OK,
-          "Subscription receive frequency acceptable",
-          subname));
-    }
-  }
+    size_t pub_freq_errors = 0;
+    size_t pub_freq_warns = 0;
+    for (const auto & [gid, tracking] : publishers_) {
+      auto deadline = tracking.info.qos_profile().deadline();
+      const std::string & topic = tracking.topic_name;
+      bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
 
-  return msg;
+      bool no_deadline = deadline_not_set(deadline);
+      bool ignore_deadline = config_.topic_statistics.ignore_topics.count(topic) > 0;
+      bool mandatory_deadline = config_.topic_statistics.mandatory_topics.count(topic) > 0;
+      bool deadline_not_required = (no_deadline && !mandatory_deadline) || ignore_deadline;
+
+      if (deadline_not_required) {
+        // No deadline, don't care
+      } else if (stale) {
+        // Haven't received topic statistics recently enough, likely this means it's not running
+        pub_freq_status.add("Stale topic statistics for publisher with deadline", topic);
+        pub_freq_errors++;
+      } else if (!tracking.period_stat.has_value()) {
+        // Not stale yet, but also not yet received statistics info. Just waiting.
+      } else if (!topic_period_ok(*tracking.period_stat, deadline)) {
+        // Have received topic stats and it isn't in good range
+        pub_freq_status.add("Publisher sending too slowly", topic);
+        pub_freq_warns++;
+      } else {
+        pub_freq_status.add("Publisher frequency OK", topic);
+      }
+    }
+    if (pub_freq_errors > 0) {
+      pub_freq_status.summaryf(
+        DiagnosticStatus::ERROR,
+        "Frequency errors detected.",
+        pub_freq_errors);
+    }
+    if (pub_freq_warns > 0) {
+      pub_freq_status.summaryf(
+        DiagnosticStatus::WARN,
+        "Frequency warnings detected.",
+        pub_freq_warns);
+    }
+    status.push_back(pub_freq_status);
+  }
+  {
+    diagnostic_updater::DiagnosticStatusWrapper sub_freq_status;
+    statusWrapper(
+      sub_freq_status, DiagnosticStatus::OK, "Receive frequencies OK", "receive_frequency");
+    size_t sub_freq_errors = 0;
+    size_t sub_freq_warns = 0;
+    for (const auto & [gid, tracking] : subscriptions_) {
+      auto deadline = tracking.info.qos_profile().deadline();
+      const std::string & topic = tracking.topic_name;
+      bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
+      if (deadline_not_set(deadline)) {
+        // No deadline, don't care
+      } else if (stale) {
+        // Haven't received topic statistics recently enough, likely this means it's not running
+        sub_freq_status.add("Stale topic statistics for subscription with deadline", topic);
+        sub_freq_errors++;
+      } else if (!tracking.period_stat.has_value()) {
+        // Not stale yet, but also not yet received statistics info. Just waiting.
+      } else if (!topic_period_ok(*tracking.period_stat, deadline)) {
+        // Have received topic stats and it isn't in good range
+        sub_freq_status.add("Subscription receiving too slowly", topic);
+        sub_freq_warns++;
+      } else {
+        sub_freq_status.add("Subscription receive frequency OK", topic);
+      }
+    }
+    if (sub_freq_errors > 0) {
+      sub_freq_status.summaryf(
+        DiagnosticStatus::ERROR,
+        "Frequency errors detected.",
+        sub_freq_errors);
+    }
+    if (sub_freq_warns > 0) {
+      sub_freq_status.summaryf(
+        DiagnosticStatus::WARN,
+        "Frequency warnings detected.",
+        sub_freq_warns);
+    }
+    status.push_back(sub_freq_status);
+  }
 }
 
 void RosGraphMonitor::watch_for_updates()
@@ -545,20 +570,18 @@ void RosGraphMonitor::on_topic_statistics(const rosgraph_monitor_msgs::msg::Topi
   }
 }
 
-diagnostic_msgs::msg::DiagnosticStatus RosGraphMonitor::statusMsg(
+void RosGraphMonitor::statusWrapper(
+  diagnostic_updater::DiagnosticStatusWrapper & msg,
   uint8_t level,
   const std::string & message,
   const std::string & subname) const
 {
-  diagnostic_msgs::msg::DiagnosticStatus msg;
-  msg.level = level;
+  msg.summary(level, message);
   msg.name = config_.diagnostic_namespace;
   if (!subname.empty()) {
-    msg.name += "::" + subname;
+    msg.name += "/" + subname;
   }
-  msg.message = message;
   msg.hardware_id = "health";
-  return msg;
 }
 
 

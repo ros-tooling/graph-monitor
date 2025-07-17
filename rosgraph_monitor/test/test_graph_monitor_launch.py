@@ -19,9 +19,11 @@ import threading
 import time
 import unittest
 
-from diagnostic_msgs.msg import DiagnosticArray
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+from launch.substitutions import PathSubstitution
+from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
 import rclpy
@@ -32,18 +34,14 @@ from std_msgs.msg import Bool
 
 @pytest.mark.launch_test
 def generate_test_description():
-    # Initialize with default params
-    device_under_test = Node(
-        package='rosgraph_monitor',
-        executable='rosgraph_monitor_node',
-        name='rosgraph_monitor',
-        output='screen',
-        arguments=['--ros-args', '--log-level', 'DEBUG'],
-    )
-
-    context = {'device_under_test': device_under_test}
-    return (LaunchDescription([device_under_test,
-                               ReadyToTest()]),  context)
+    return LaunchDescription([
+        IncludeLaunchDescription(
+            PathSubstitution(FindPackageShare('rosgraph_monitor')) /
+            'launch' / 'monitor_launch.yaml',
+            launch_arguments=[('log_level', 'DEBUG')]
+        ),
+        ReadyToTest(),
+    ])
 
 
 class TestProcessOutput(unittest.TestCase):
@@ -76,9 +74,8 @@ class TestProcessOutput(unittest.TestCase):
             qos = QoSProfile(depth=10)
 
         self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
-        timer_period = 0.1  # seconds
-        self.publishr_timer = self.publisher_node.create_timer(
-            timer_period, self.publisher_callback)
+        self.publish_timer = self.publisher_node.create_timer(
+            timer_period_sec=0.1, callback=self.publisher_callback)
 
         self.spin_thread = threading.Thread(target=self.executor.spin)
         self.spin_thread.start()
@@ -99,31 +96,34 @@ class TestProcessOutput(unittest.TestCase):
             DiagnosticArray,
             '/diagnostics_agg',
             lambda msg: self.diagnostics_agg_msgs.append(msg),
-            1)
+            QoSProfile(depth=1),
+        )
 
         end_time = time.time() + 5
         while time.time() < end_time:
             rclpy.spin_once(self.publisher_node, timeout_sec=0.1)
 
-        self.assertGreaterEqual(
-            len(self.diagnostics_agg_msgs),
-            1, 'There should be at least one /diagnostics_agg message')
-
-        last_msg = self.diagnostics_agg_msgs[-1]
-        self.assertTrue(
-            all(int.from_bytes(
-                status.level, byteorder='big') == 0 for status in last_msg.status),
-            'All diagnostic statuses should be healthy')
-
-        self.subscriber_node.destroy_subscription(sub)
-
         self.assertGreater(
             len(self.diagnostics_agg_msgs),
-            0, 'There should be at least one /diagnostics_agg message')
+            0,
+            'Should have received at least one /diagnostics_agg message',
+        )
 
-        last_msg = self.diagnostics_agg_msgs[-1]
-
+        last_msg = self.diagnostics_agg_msgs.pop(-1)
         self.assertTrue(
-            all(int.from_bytes(
-                status.level, byteorder='big') == 0 for status in last_msg.status),
-            'All diagnostic statuses should be healthy')
+            all(status.level == DiagnosticStatus.OK for status in last_msg.status),
+            f'All diagnostic statuses should be healthy: {last_msg}',
+        )
+
+        self.subscriber_node.destroy_subscription(sub)
+        self.assertGreater(
+            len(self.diagnostics_agg_msgs),
+            0,
+            'Should have received at least one more /diagnostics_agg message',
+        )
+
+        last_msg = self.diagnostics_agg_msgs.pop(-1)
+        self.assertTrue(
+            all(status.level == DiagnosticStatus.OK for status in last_msg.status),
+            f'All diagnostic statuses should be healthy: {last_msg}',
+        )

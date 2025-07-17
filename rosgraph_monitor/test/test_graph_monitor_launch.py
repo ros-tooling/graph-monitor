@@ -20,8 +20,8 @@ import time
 import unittest
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
-from rosgraph_monitor_msgs.msg import RosGraph
 from launch import LaunchDescription
+from rosgraph_monitor_msgs.msg import RosGraph
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -150,9 +150,9 @@ class TestProcessOutput(unittest.TestCase):
         self.assertIsNotNone(
             last_msg, 'Last rosgraph message should not be None')
 
-        self.assertTrue(any([
+        self.assertTrue(any(
             node.name.startswith('/publisher_node')
-            for node in last_msg.nodes]),
+            for node in last_msg.nodes),
             'Node info should contain publisher_node details')
 
         self.subscriber_node.destroy_subscription(rosgraph_sub)

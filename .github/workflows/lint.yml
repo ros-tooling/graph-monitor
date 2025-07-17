@@ -1,5 +1,6 @@
+---
 name: Lint
-on:
+"on":
   pull_request:
 
 env:
@@ -16,10 +17,10 @@ jobs:
     container:
       image: rostooling/setup-ros-docker:ubuntu-jammy-ros-rolling-ros-base-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: ros-tooling/action-ros-lint@v0.1
-      with:
-        linter: ${{ matrix.linter }}
-        arguments: ${{ matrix.arguments }}
-        distribution: rolling
-        package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs
+      - uses: actions/checkout@v4
+      - uses: ros-tooling/action-ros-lint@v0.1
+        with:
+          linter: ${{ matrix.linter }}
+          arguments: ${{ matrix.arguments }}
+          distribution: rolling
+          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs

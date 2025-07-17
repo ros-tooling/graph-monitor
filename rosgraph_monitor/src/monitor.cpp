@@ -14,7 +14,11 @@
 
 #include "rosgraph_monitor/monitor.hpp"
 
+#include <cstdio>
 #include <functional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "rclcpp/logging.hpp"
 
@@ -589,10 +593,10 @@ void RosGraphMonitor::statusWrapper(
   msg.hardware_id = "health";
 }
 
-std::unique_ptr<rosgraph_monitor_msgs::msg::RosGraph> RosGraphMonitor::generate_rosgraph()
+void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 {
-  auto msg = std::make_unique<rosgraph_monitor_msgs::msg::RosGraph>();
-  msg->timestamp = now_fn_();
+  msg.timestamp = now_fn_();
+  msg.nodes.clear();
 
   for (const auto & [node_name, node_info] : nodes_) {
     if (ignore_node(node_name)) {
@@ -601,10 +605,8 @@ std::unique_ptr<rosgraph_monitor_msgs::msg::RosGraph> RosGraphMonitor::generate_
 
     rosgraph_monitor_msgs::msg::NodeInfo node_msg;
     node_msg.name = node_name;
-    msg->nodes.push_back(node_msg);
+    msg.nodes.push_back(node_msg);
   }
-
-  return msg;
 }
 
 void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)

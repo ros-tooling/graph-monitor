@@ -14,9 +14,14 @@
 
 #include "rosgraph_monitor/node.hpp"
 
+#include <memory>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
-#include "rosgraph_monitor_msgs/msg/ros_graph.hpp"
+#include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
@@ -73,11 +78,9 @@ Node::Node(const rclcpp::NodeOptions & options)
       "/diagnostics",
       10)),
   pub_rosgraph_(
-    create_publisher<rosgraph_monitor_msgs::msg::RosGraph>(
+    create_publisher<rosgraph_monitor_msgs::msg::Graph>(
       "/rosgraph",
-      rclcpp::QoS{1}
-      .durability(rclcpp::DurabilityPolicy::TransientLocal)
-      .reliability(rclcpp::ReliabilityPolicy::Reliable))),
+      rclcpp::QoS(1).transient_local().reliable())),
 
   timer_publish_report_(
     create_wall_timer(
@@ -117,7 +120,8 @@ void Node::publish_diagnostics()
 
 void Node::publish_rosgraph()
 {
-  auto rosgraph_msg = graph_monitor_.generate_rosgraph();
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
+  graph_monitor_.fill_rosgraph_msg(rosgraph_msg);
   pub_rosgraph_->publish(std::move(rosgraph_msg));
 }
 

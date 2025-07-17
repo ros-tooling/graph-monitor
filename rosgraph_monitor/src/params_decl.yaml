@@ -1,3 +1,4 @@
+---
 rosgraph_monitor:
   diagnostics_publish_period_ms:
     type: int
@@ -51,17 +52,23 @@ rosgraph_monitor:
     topic_statistics:
       deadline_allowed_error:
         type: double
-        description: Multiplier for the deadline period, if period falls within this error bound it is considered correct
+        description: |
+          Multiplier for the deadline period, if period falls within this error bound it is considered correct
         default_value: 0.1
       stale_timeout_ms:
         type: int
-        description: Maximum period to receive updated statistics for a topic before an error is raised that it is missing
+        description: |
+          Maximum period to receive updated statistics for a topic before an error is raised that it is missing
         default_value: 3000
       mandatory_topics:
         type: string_array
-        description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.
+        description: |
+          Pre-seeds list of topics that must exist, have deadlines, and meet them.
+          Note all other discovered deadline topics are still tracked.
         default_value: []
       ignore_topics:
         type: string_array
-        description: Topics with a deadline whose frequency should not be considered for health outcomes (escape hatch for known bad design/implementation)
+        description: |
+          Topics with a deadline whose frequency should not be considered for health outcomes.
+          This is mainly an escape hatch for known bad design/implementation
         default_value: []

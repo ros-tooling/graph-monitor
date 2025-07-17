@@ -75,9 +75,7 @@ Node::Node(const rclcpp::NodeOptions & options)
   pub_rosgraph_(
     create_publisher<rosgraph_monitor_msgs::msg::Graph>(
       "/rosgraph",
-      rclcpp::QoS{1}
-      .durability(rclcpp::DurabilityPolicy::TransientLocal)
-      .reliability(rclcpp::ReliabilityPolicy::Reliable))),
+      rclcpp::QoS(1).transient_local().reliable())),
 
   timer_publish_report_(
     create_wall_timer(

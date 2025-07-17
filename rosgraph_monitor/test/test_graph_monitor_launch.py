@@ -75,7 +75,8 @@ class TestProcessOutput(unittest.TestCase):
         else:
             qos = QoSProfile(depth=10)
 
-        self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
+        self.dummy_publisher = self.publisher_node.create_publisher(
+            Bool, '/bool_publisher', qos)
         self.publish_timer = self.publisher_node.create_timer(
             timer_period_sec=0.1, callback=self.publisher_callback)
 
@@ -100,7 +101,6 @@ class TestProcessOutput(unittest.TestCase):
             lambda msg: self.diagnostics_agg_msgs.append(msg),
             QoSProfile(depth=1),
         )
-
 
         end_time = time.time() + 5
         while time.time() < end_time:
@@ -147,11 +147,12 @@ class TestProcessOutput(unittest.TestCase):
             0, 'There should be at least one /rosgraph message')
 
         last_msg = self.rosgraph_msgs[-1]
-        self.assertIsNotNone(last_msg, 'Last rosgraph message should not be None')
+        self.assertIsNotNone(
+            last_msg, 'Last rosgraph message should not be None')
 
         self.assertTrue(any([
             node.name.startswith('/publisher_node')
             for node in last_msg.nodes]),
-           'Node info should contain publisher_node details')
+            'Node info should contain publisher_node details')
 
         self.subscriber_node.destroy_subscription(rosgraph_sub)

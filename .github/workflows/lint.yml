@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linter: [copyright, xmllint, cppcheck, cpplint]
+        linter: [copyright, cppcheck, cpplint, flake8, xmllint]
     name: ament_${{ matrix.linter }}
     runs-on: ubuntu-latest
     container:

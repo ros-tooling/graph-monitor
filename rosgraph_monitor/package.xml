@@ -4,8 +4,12 @@
   <name>rosgraph_monitor</name>
   <version>0.1.2</version>
   <description>Monitors the ROS graph to detect error conditions</description>
-  <maintainer email="emerson.knapp@bonsairobotics.ai">Bonsai Robotics Engineering</maintainer>
+  <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
+  <maintainer email="troy@polymathrobotics.com">Troy Gibb</maintainer>
   <license>Apache License 2.0</license>
+  <author email="emerson.knapp@bonsairobotics.ai">Emerson Knapp on behalf of Bonsai Robotics</author>
+  <author email="troy@polymathrobotics.com">Troy Gibb</author>
+  <author email="josh@electrifiedautonomy.com">Joshua Whitley</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>generate_parameter_library</buildtool_depend>

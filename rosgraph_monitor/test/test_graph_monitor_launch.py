@@ -20,6 +20,7 @@ import time
 import unittest
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
+from rosgraph_monitor_msgs.msg import RosGraph
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
@@ -61,6 +62,7 @@ class TestProcessOutput(unittest.TestCase):
         self.diagnostics = []
         self.diagnostics_agg_msgs = []
         self.topic_statistics = []
+        self.rosgraph_msgs = []
         self.publisher_node = rclpy.create_node('publisher_node')
         self.subscriber_node = rclpy.create_node('subscriber_node')
 
@@ -91,13 +93,14 @@ class TestProcessOutput(unittest.TestCase):
         self.subscriber_node.destroy_node()
         self.publisher_node.destroy_node()
 
-    def test_health_monitor_diagnostics(self):
+    def test_diagnostics(self):
         sub = self.subscriber_node.create_subscription(
             DiagnosticArray,
             '/diagnostics_agg',
             lambda msg: self.diagnostics_agg_msgs.append(msg),
             QoSProfile(depth=1),
         )
+
 
         end_time = time.time() + 5
         while time.time() < end_time:
@@ -127,3 +130,28 @@ class TestProcessOutput(unittest.TestCase):
             all(status.level == DiagnosticStatus.OK for status in last_msg.status),
             f'All diagnostic statuses should be healthy: {last_msg}',
         )
+
+    def test_rosgraph_messages(self):
+        rosgraph_sub = self.subscriber_node.create_subscription(
+            RosGraph,
+            '/rosgraph',
+            lambda msg: self.rosgraph_msgs.append(msg),
+            1)
+
+        end_time = time.time() + 5
+        while time.time() < end_time:
+            rclpy.spin_once(self.publisher_node, timeout_sec=0.1)
+
+        self.assertGreater(
+            len(self.rosgraph_msgs),
+            0, 'There should be at least one /rosgraph message')
+
+        last_msg = self.rosgraph_msgs[-1]
+        self.assertIsNotNone(last_msg, 'Last rosgraph message should not be None')
+
+        self.assertTrue(any([
+            node.name.startswith('/publisher_node')
+            for node in last_msg.nodes]),
+           'Node info should contain publisher_node details')
+
+        self.subscriber_node.destroy_subscription(rosgraph_sub)

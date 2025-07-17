@@ -718,3 +718,50 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
   CHECK_STATUS("Publisher removed and replaced, not stale", pub_freq_diagnostic, OK);
   CHECK_STATUS("Subscription removed and replaced, not stale", sub_freq_diagnostic, OK);
 }
+
+TEST_F(GraphMonitorTest, rosgraph_generation) {
+  // Set up test nodes
+  set_node_names({"node1", "node2", "node3"});
+  trigger_and_wait();
+
+  // Generate rosgraph message
+  auto rosgraph_msg = graphmon_->generate_rosgraph();
+
+  // Verify the message contains expected nodes
+  ASSERT_NE(rosgraph_msg, nullptr);
+  EXPECT_EQ(rosgraph_msg->nodes.size(), 3);
+
+  // Verify node names are present
+  std::vector<std::string> node_names;
+  for (const auto &node : rosgraph_msg->nodes) {
+    node_names.push_back(node.name);
+  }
+
+  EXPECT_THAT(node_names,
+              testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
+
+  // Verify timestamp is set (should be current time in test environment)
+  EXPECT_EQ(rosgraph_msg->timestamp, now_);
+}
+
+TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
+  // Set up some nodes, including one that should be ignored
+  graphmon_->config().nodes.ignore_prefixes = {"/dummy"};
+  set_node_names({"node1", "node2", "dummy/ignored_node"});
+  trigger_and_wait();
+
+  // Generate rosgraph message
+  auto rosgraph_msg = graphmon_->generate_rosgraph();
+
+  // Verify the message contains only non-ignored nodes
+  ASSERT_NE(rosgraph_msg, nullptr);
+  EXPECT_EQ(rosgraph_msg->nodes.size(), 2);
+
+  // Verify node names are present (should not include ignored node)
+  std::vector<std::string> node_names;
+  for (const auto &node : rosgraph_msg->nodes) {
+    node_names.push_back(node.name);
+  }
+
+  EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2"));
+}

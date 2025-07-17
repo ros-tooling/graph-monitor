@@ -29,6 +29,8 @@ find_package(builtin_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  msg/NodeInfo.msg
+  msg/RosGraph.msg
   msg/TopicStatistic.msg
   msg/TopicStatistics.msg
   DEPENDENCIES

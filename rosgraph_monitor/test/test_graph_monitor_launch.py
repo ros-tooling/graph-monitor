@@ -34,7 +34,8 @@ from std_msgs.msg import Bool
 
 
 def wait_for_message(node, message_type, topic, condition_func, timeout_sec=5.0):
-    """Wait for a message that meets a condition or timeout.
+    """
+    Wait for a message that meets a condition or timeout.
 
     Args:
         node: ROS2 node to use for spinning
@@ -43,8 +44,10 @@ def wait_for_message(node, message_type, topic, condition_func, timeout_sec=5.0)
         condition_func: Function that takes a message and returns True if condition is met
         timeout_sec: Maximum time to wait in seconds
 
-    Returns:
+    Returns
+    -------
         tuple: (success: bool, messages: list) - success indicates if condition was met
+
     """
     messages = []
 

@@ -48,6 +48,8 @@ GraphMonitorConfiguration Node::create_graph_monitor_config(
   gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
   gconf.topic_statistics.stale_timeout =
     std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
+  gconf.topic_statistics.mandatory_topics = vec_to_set(gparms.topic_statistics.mandatory_topics);
+  gconf.topic_statistics.ignore_topics = vec_to_set(gparms.topic_statistics.ignore_topics);
   return gconf;
 }
 

@@ -433,7 +433,13 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
       auto deadline = tracking.info.qos_profile().deadline();
       const std::string & topic = tracking.topic_name;
       bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
-      if (deadline_not_set(deadline)) {
+
+      bool no_deadline = deadline_not_set(deadline);
+      bool ignore_deadline = config_.topic_statistics.ignore_topics.count(topic) > 0;
+      bool mandatory_deadline = config_.topic_statistics.mandatory_topics.count(topic) > 0;
+      bool deadline_not_required = (no_deadline && !mandatory_deadline) || ignore_deadline;
+
+      if (deadline_not_required) {
         // No deadline, don't care
       } else if (stale) {
         // Haven't received topic statistics recently enough, likely this means it's not running

@@ -92,6 +92,11 @@ struct GraphMonitorConfiguration
     // For topics whose frequency is tracked, if new statistics are not received within this
     // time frame then the statistic will be reported as stale with an ERROR.
     std::chrono::milliseconds stale_timeout{3000};
+    // List of topics that must exist and have deadlines
+    std::unordered_set<std::string> mandatory_topics;
+    // List of topics that should not be considered for frequency checks
+    // (e.g. topics that are known to be misconfigured and not meeting their deadlines
+    std::unordered_set<std::string> ignore_topics;
   } topic_statistics;
 };
 

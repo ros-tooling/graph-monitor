@@ -57,11 +57,11 @@ rosgraph_monitor:
         type: int
         description: Maximum period to receive updated statistics for a topic before an error is raised that it is missing
         default_value: 3000
-      mandatory_frequency_topics:
+      mandatory_topics:
         type: string_array
         description: Pre-seeds list of topics that must exist, have deadlines, and meet them. Note all other discovered deadline topics are still tracked.
         default_value: []
-      ignore_deadline_topics:
+      ignore_topics:
         type: string_array
         description: Topics with a deadline whose frequency should not be considered for health outcomes (escape hatch for known bad design/implementation)
         default_value: []

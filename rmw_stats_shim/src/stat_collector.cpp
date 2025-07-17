@@ -14,6 +14,8 @@
 
 #include "rmw_stats_shim/stat_collector.hpp"
 
+#include <string>
+
 #include "rcpputils/env.hpp"
 #include "rosidl_typesupport_cpp/message_type_support.hpp"
 

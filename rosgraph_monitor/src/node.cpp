@@ -14,6 +14,11 @@
 
 #include "rosgraph_monitor/node.hpp"
 
+#include <memory>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"

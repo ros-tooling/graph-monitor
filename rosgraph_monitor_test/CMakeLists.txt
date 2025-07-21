@@ -13,8 +13,6 @@ find_package(rosgraph_monitor REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-# launch_ros and launch_testing are Python packages, not CMake packages
-# They are declared as dependencies in package.xml for runtime
 
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
@@ -26,11 +24,6 @@ if(BUILD_TESTING)
   # Add launch tests
   add_launch_test(test/test_graph_monitor_launch.py)
   add_launch_test(test/test_diagnostics_launch.py)
-
-  # Skip linters for this test package
-  set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
 endif()
 
 ament_package()

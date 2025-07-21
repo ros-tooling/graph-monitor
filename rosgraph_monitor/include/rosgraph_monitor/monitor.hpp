@@ -240,7 +240,7 @@ protected:
   /// @brief Helper method to convert duration handling infinite values
   /// @param duration ROS2 duration to convert
   /// @param msg_duration Output message duration field to populate
-  void convert_duration_to_msg(
+  void convert_maybe_inifite_durations(
     const rclcpp::Duration & duration,
     builtin_interfaces::msg::Duration & msg_duration);
 

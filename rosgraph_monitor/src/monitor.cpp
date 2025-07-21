@@ -675,23 +675,20 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
   }
 
   // Convert Duration fields - handle infinite durations
-  convert_duration_to_msg(qos_profile.deadline(), qos_msg.deadline);
-  convert_duration_to_msg(qos_profile.lifespan(), qos_msg.lifespan);
-  convert_duration_to_msg(
-    qos_profile.liveliness_lease_duration(),
-    qos_msg.liveliness_lease_duration);
+  convert_maybe_inifite_durations(qos_profile.deadline(), qos_msg.deadline);
+  convert_maybe_inifite_durations(qos_profile.lifespan(), qos_msg.lifespan);
+  convert_maybe_inifite_durations(qos_profile.liveliness_lease_duration(), qos_msg.liveliness_lease_duration);
 
   return qos_msg;
 }
 
-void RosGraphMonitor::convert_duration_to_msg(
+void RosGraphMonitor::convert_maybe_inifite_durations(
   const rclcpp::Duration & duration,
   builtin_interfaces::msg::Duration & msg_duration)
 {
   auto rmw_time = duration.to_rmw_time();
   if (rmw_time_equal(rmw_time, RMW_DURATION_INFINITE) ||
-    rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED))
-  {
+      rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED)) {
     msg_duration.sec = 0;
     msg_duration.nanosec = 0;
   } else {

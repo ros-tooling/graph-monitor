@@ -106,7 +106,7 @@ if(BUILD_TESTING)
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor ${PROJECT_NAME})
 
-  add_launch_test(test/test_graph_monitor_launch.py)
+  # Launch tests moved to rosgraph_monitor_test package
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

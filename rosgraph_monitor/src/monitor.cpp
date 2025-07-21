@@ -593,18 +593,152 @@ void RosGraphMonitor::statusWrapper(
   msg.hardware_id = "health";
 }
 
+rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
+  const rclcpp::QoS & qos_profile)
+{
+  rosgraph_monitor_msgs::msg::QosProfile qos_msg;
+
+  // History policy
+  switch (qos_profile.history()) {
+    case rclcpp::HistoryPolicy::SystemDefault:
+      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_SYSTEM_DEFAULT;
+      break;
+    case rclcpp::HistoryPolicy::KeepLast:
+      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_KEEP_LAST;
+      break;
+    case rclcpp::HistoryPolicy::KeepAll:
+      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_KEEP_ALL;
+      break;
+    case rclcpp::HistoryPolicy::Unknown:
+    default:
+      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_SYSTEM_DEFAULT;
+      break;
+  }
+
+  qos_msg.depth = qos_profile.depth();
+
+  // Reliability policy
+  switch (qos_profile.reliability()) {
+    case rclcpp::ReliabilityPolicy::SystemDefault:
+      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_SYSTEM_DEFAULT;
+      break;
+    case rclcpp::ReliabilityPolicy::Reliable:
+      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_RELIABLE;
+      break;
+    case rclcpp::ReliabilityPolicy::BestEffort:
+      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_BEST_EFFORT;
+      break;
+    case rclcpp::ReliabilityPolicy::Unknown:
+    default:
+      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_SYSTEM_DEFAULT;
+      break;
+  }
+
+  // Durability policy
+  switch (qos_profile.durability()) {
+    case rclcpp::DurabilityPolicy::SystemDefault:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
+      break;
+    case rclcpp::DurabilityPolicy::TransientLocal:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_TRANSIENT_LOCAL;
+      break;
+    case rclcpp::DurabilityPolicy::Volatile:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_VOLATILE;
+      break;
+    case rclcpp::DurabilityPolicy::Unknown:
+    default:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
+      break;
+  }
+
+  // Liveliness policy
+  switch (qos_profile.liveliness()) {
+    case rclcpp::LivelinessPolicy::SystemDefault:
+      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_SYSTEM_DEFAULT;
+      break;
+    case rclcpp::LivelinessPolicy::Automatic:
+      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_AUTOMATIC;
+      break;
+    case rclcpp::LivelinessPolicy::ManualByTopic:
+      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_MANUAL_BY_TOPIC;
+      break;
+    case rclcpp::LivelinessPolicy::Unknown:
+    default:
+      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_SYSTEM_DEFAULT;
+      break;
+  }
+
+  // Convert Duration fields - handle infinite durations
+  auto deadline_rmw = qos_profile.deadline().to_rmw_time();
+  if (rmw_time_equal(deadline_rmw, RMW_DURATION_INFINITE) ||
+      rmw_time_equal(deadline_rmw, RMW_DURATION_UNSPECIFIED)) {
+    qos_msg.deadline.sec = 0;
+    qos_msg.deadline.nanosec = 0;
+  } else {
+    qos_msg.deadline.sec = deadline_rmw.sec;
+    qos_msg.deadline.nanosec = deadline_rmw.nsec;
+  }
+
+  auto lifespan_rmw = qos_profile.lifespan().to_rmw_time();
+  if (rmw_time_equal(lifespan_rmw, RMW_DURATION_INFINITE) ||
+      rmw_time_equal(lifespan_rmw, RMW_DURATION_UNSPECIFIED)) {
+    qos_msg.lifespan.sec = 0;
+    qos_msg.lifespan.nanosec = 0;
+  } else {
+    qos_msg.lifespan.sec = lifespan_rmw.sec;
+    qos_msg.lifespan.nanosec = lifespan_rmw.nsec;
+  }
+
+  auto liveliness_lease_rmw = qos_profile.liveliness_lease_duration().to_rmw_time();
+  if (rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_INFINITE) ||
+      rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_UNSPECIFIED)) {
+    qos_msg.liveliness_lease_duration.sec = 0;
+    qos_msg.liveliness_lease_duration.nanosec = 0;
+  } else {
+    qos_msg.liveliness_lease_duration.sec = liveliness_lease_rmw.sec;
+    qos_msg.liveliness_lease_duration.nanosec = liveliness_lease_rmw.nsec;
+  }
+
+  return qos_msg;
+}
+
 void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 {
   msg.timestamp = now_fn_();
   msg.nodes.clear();
 
+  RCLCPP_INFO(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
+
   for (const auto & [node_name, node_info] : nodes_) {
-    if (ignore_node(node_name)) {
+    if (ignore_node(node_name) || node_info.missing || node_info.stale) {
       continue;
     }
 
     rosgraph_monitor_msgs::msg::NodeInfo node_msg;
     node_msg.name = node_name;
+
+    // Add publishers for this node
+    for (const auto & [gid, tracking] : publishers_) {
+      if (tracking.node_name == node_name) {
+        rosgraph_monitor_msgs::msg::Topic topic_msg;
+        topic_msg.name = tracking.topic_name;
+        topic_msg.type = tracking.info.topic_type();
+        topic_msg.qos = convert_qos_profile(tracking.info.qos_profile());
+        node_msg.publishers.push_back(topic_msg);
+      }
+    }
+
+    // Add subscriptions for this node
+    for (const auto & [gid, tracking] : subscriptions_) {
+      if (tracking.node_name == node_name) {
+        rosgraph_monitor_msgs::msg::Topic topic_msg;
+        topic_msg.name = tracking.topic_name;
+        topic_msg.type = tracking.info.topic_type();
+        topic_msg.qos = convert_qos_profile(tracking.info.qos_profile());
+        node_msg.subscriptions.push_back(topic_msg);
+      }
+    }
+
     msg.nodes.push_back(node_msg);
   }
 }

@@ -31,6 +31,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   msg/NodeInfo.msg
   msg/Graph.msg
+  msg/QosProfile.msg
+  msg/Topic.msg
   msg/TopicStatistic.msg
   msg/TopicStatistics.msg
   DEPENDENCIES

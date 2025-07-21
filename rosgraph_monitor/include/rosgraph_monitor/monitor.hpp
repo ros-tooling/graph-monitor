@@ -29,11 +29,14 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"
 #include "rclcpp/logger.hpp"
+#include "rclcpp/node.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/qos_profile.hpp"
+#include "rosgraph_monitor_msgs/msg/parameter.hpp"
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
 
 #include "rosgraph_monitor/event.hpp"
 
@@ -111,11 +114,13 @@ public:
   /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param node_graph Interface from owning Node to retrieve information about the ROS graph
   /// @param logger
+  /// @param node Optional shared pointer to the node for parameter client creation
   RosGraphMonitor(
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{},
+    rclcpp::Node::SharedPtr node = nullptr);
 
   virtual ~RosGraphMonitor();
 
@@ -144,6 +149,10 @@ public:
   /// @brief Set callback function to be called when graph changes
   /// @param callback Function to call when graph updates occur
   void set_graph_change_callback(std::function<void()> callback);
+
+  /// @brief Set the node reference for parameter querying
+  /// @param node Shared pointer to the node
+  void set_node(rclcpp::Node::SharedPtr node);
 
 protected:
   /* Types */
@@ -244,6 +253,7 @@ protected:
     const rclcpp::Duration & duration,
     builtin_interfaces::msg::Duration & msg_duration);
 
+
   /* Members */
 
   // Configuration
@@ -251,6 +261,7 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
+  rclcpp::Node::SharedPtr node_;  // Optional node reference for parameter querying
 
   // Execution model
   std::atomic_bool shutdown_ = false;

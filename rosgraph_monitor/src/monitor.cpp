@@ -19,8 +19,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #include "rclcpp/logging.hpp"
+#include "rclcpp/parameter_client.hpp"
 
 
 std::size_t std::hash<RosRmwGid>::operator()(
@@ -106,11 +108,13 @@ RosGraphMonitor::RosGraphMonitor(
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
   std::function<rclcpp::Time()> now_fn,
   rclcpp::Logger logger,
-  GraphMonitorConfiguration config)
+  GraphMonitorConfiguration config,
+  rclcpp::Node::SharedPtr node)
 : config_(config),
   now_fn_(now_fn),
   node_graph_(node_graph),
   logger_(logger),
+  node_(node),
   graph_change_event_(node_graph->get_graph_event())
 {
   update_graph();
@@ -699,6 +703,7 @@ void RosGraphMonitor::convert_maybe_inifite_durations(
   }
 }
 
+
 void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 {
   msg.timestamp = now_fn_();
@@ -736,6 +741,66 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
       }
     }
 
+    // Query parameters
+    if (node_) {
+      try {
+        // Extract namespace and node name from the full node name
+        std::string node_namespace = "/";
+        std::string node_name_only = node_name;
+
+        // Handle cases where node_name includes namespace
+        // size_t last_slash = node_name.find_last_of('/');
+        // if (last_slash != std::string::npos && last_slash > 0) {
+          // node_namespace = node_name.substr(0, last_slash);
+          // node_name_only = node_name.substr(last_slash + 1);
+        // } else if (node_name.front() == '/' && node_name.size() > 1) {
+          // node_name_only = node_name.substr(1);
+        // }
+
+        // Create parameter client for this node
+        auto parameter_client = std::make_shared<rclcpp::AsyncParametersClient>(
+          node_,
+          node_name);
+
+        // Wait for parameter service to be available (with short timeout)
+        if (parameter_client->wait_for_service(std::chrono::milliseconds(50))) {
+          // List all parameters
+          auto list_future = parameter_client->list_parameters({}, 0);
+          RCLCPP_INFO(logger_, "Querying parameters for node %s", node_name.c_str());
+
+          // Wait for result with timeout
+          if (list_future.wait_for(std::chrono::milliseconds(50)) == std::future_status::ready) {
+            auto param_list = list_future.get();
+
+            if (!param_list.names.empty()) {
+              // Get parameter values and descriptors
+              auto values_future = parameter_client->get_parameters(param_list.names);
+              auto descriptors_future = parameter_client->describe_parameters(param_list.names);
+
+              bool values_ready = values_future.wait_for(std::chrono::milliseconds(50)) == std::future_status::ready;
+              bool descriptors_ready = descriptors_future.wait_for(std::chrono::milliseconds(50)) == std::future_status::ready;
+
+              if (values_ready && descriptors_ready) {
+                auto param_values = values_future.get();
+                auto param_descriptors = descriptors_future.get();
+
+                // Convert parameters to message format
+                for (size_t i = 0; i < param_list.names.size() && i < param_values.size() && i < param_descriptors.size(); ++i) {
+                  rosgraph_monitor_msgs::msg::Parameter param_msg;
+                  param_msg.name = param_list.names[i];
+                  param_msg.value = param_values[i].get_parameter_value().to_value_msg();
+                  param_msg.descriptor = param_descriptors[i];
+                  node_msg.parameters.push_back(param_msg);
+                }
+              }
+            }
+          }
+        }
+      } catch (const std::exception & e) {
+        RCLCPP_DEBUG(logger_, "Failed to query parameters for node %s: %s", node_name.c_str(), e.what());
+      }
+    }
+
     msg.nodes.push_back(node_msg);
   }
 }
@@ -743,6 +808,11 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
 {
   graph_change_callback_ = callback;
+}
+
+void RosGraphMonitor::set_node(rclcpp::Node::SharedPtr node)
+{
+  node_ = node;
 }
 
 

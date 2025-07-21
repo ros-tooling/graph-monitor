@@ -89,6 +89,9 @@ Node::Node(const rclcpp::NodeOptions & options)
 {
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
 
+  // Set the node reference for parameter querying
+  graph_monitor_.set_node(shared_from_this());
+
   // Set up callback to publish rosgraph when nodes change
   graph_monitor_.set_graph_change_callback(std::bind(&Node::publish_rosgraph, this));
 

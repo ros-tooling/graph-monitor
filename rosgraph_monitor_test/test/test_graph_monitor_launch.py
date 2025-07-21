@@ -14,9 +14,6 @@
 
 import threading
 import unittest
-import json
-
-from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
@@ -24,14 +21,12 @@ from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
 import rclpy
-from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
 
 from std_msgs.msg import Bool
 
 from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message
-
 
 
 @pytest.mark.launch_test
@@ -153,6 +148,7 @@ class TestProcessOutput(unittest.TestCase):
             qos.liveliness_lease_duration.nanosec, 0,
             f'{context} should have infinite liveliness lease (0 nanoseconds).'
         )
+
     def test_adding_node(self):
         new_node, node_name = self.add_node()
 
@@ -162,7 +158,8 @@ class TestProcessOutput(unittest.TestCase):
             if not test_node:
                 return False
 
-            # Assert on equality of subscribers/publisher - new node should have no publishers/subscribers
+            # Assert on equality of subscribers/publisher - new node should have
+            # no publishers/subscribers
             self.assertEqual(
                 len(test_node.subscriptions), 0,
                 'New node should not have any subscribers initially.'
@@ -267,13 +264,19 @@ class TestProcessOutput(unittest.TestCase):
             # Find the subscriber node
             updated_node = find_node(msg, node_name)
             if not updated_node:
-                print(f"DEBUG: No subscriber node found. Available nodes: {[n.name for n in msg.nodes]}")
+                print(f"DEBUG: No subscriber node found. Available nodes: "
+                      f"{[n.name for n in msg.nodes]}")
                 return False
 
             # Find the specific subscription we added
-            test_subscriptions = [sub for sub in updated_node.subscriptions if sub.name == '/test_sub_topic']
+            test_subscriptions = [
+                sub for sub in updated_node.subscriptions
+                if sub.name == '/test_sub_topic'
+            ]
             if not test_subscriptions:
-                print(f"DEBUG: No test_sub_topic subscription found. Available subscriptions: {[s.name for s in updated_node.subscriptions]}")
+                print(f"DEBUG: No test_sub_topic subscription found. "
+                      f"Available subscriptions: "
+                      f"{[s.name for s in updated_node.subscriptions]}")
                 return False
 
             # Assert that our subscription was added
@@ -294,8 +297,12 @@ class TestProcessOutput(unittest.TestCase):
             )
 
             # Verify QoS properties
-            print(f"DEBUG: Subscription QoS - depth: {subscription.qos.depth}, history: {subscription.qos.history}, reliability: {subscription.qos.reliability}")
-            print(f"DEBUG: Subscription QoS - deadline: {subscription.qos.deadline.sec}s {subscription.qos.deadline.nanosec}ns")
+            print(f"DEBUG: Subscription QoS - depth: {subscription.qos.depth}, "
+                  f"history: {subscription.qos.history}, "
+                  f"reliability: {subscription.qos.reliability}")
+            print(f"DEBUG: Subscription QoS - deadline: "
+                  f"{subscription.qos.deadline.sec}s "
+                  f"{subscription.qos.deadline.nanosec}ns")
             self.assert_qos_properties(subscription.qos, expected_depth=10, context="Subscription")
             return True
 

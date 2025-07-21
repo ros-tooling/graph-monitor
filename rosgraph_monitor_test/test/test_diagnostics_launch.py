@@ -31,7 +31,6 @@ from std_msgs.msg import Bool
 from rosgraph_monitor_test.test_utils import wait_for_message
 
 
-
 @pytest.mark.launch_test
 def generate_test_description():
     return LaunchDescription([

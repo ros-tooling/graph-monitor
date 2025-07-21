@@ -33,6 +33,7 @@
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
+#include "rosgraph_monitor_msgs/msg/qos_profile.hpp"
 
 #include "rosgraph_monitor/event.hpp"
 
@@ -230,6 +231,11 @@ protected:
     uint8_t level,
     const std::string & message,
     const std::string & subname) const;
+
+  /// @brief Convert ROS2 QoS profile to message format
+  /// @param qos_profile ROS2 QoS profile to convert
+  /// @return QoS profile in message format
+  rosgraph_monitor_msgs::msg::QosProfile convert_qos_profile(const rclcpp::QoS & qos_profile);
 
   /* Members */
 

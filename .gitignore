@@ -1,2 +1,7 @@
 # Produced by launch_testing
 __pycache__
+
+# Ignore build artifacts
+build/
+install/
+log/

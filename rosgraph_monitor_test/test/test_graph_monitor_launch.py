@@ -63,7 +63,6 @@ class TestProcessOutput(unittest.TestCase):
         cls.spin_thread.join()
         cls.executor.shutdown()
         cls.subscriber_node.destroy_node()
-
     def add_node(self, node_name=None):
         """Create and add a new ROS node to the executor.
 
@@ -370,3 +369,62 @@ class TestProcessOutput(unittest.TestCase):
             f'This indicates the rosgraph monitor is functioning properly. '
             f'Received {len(messages) if messages else 0} messages.'
         )
+    def test_node_params(self):
+        """Test that node parameters are captured in the graph output."""
+        # Create a node with parameters
+        node_name = create_random_node_name()
+        param_node = rclpy.create_node(node_name)
+
+        # Declare parameters with different types
+        param_node.declare_parameter('test_int', 42)
+        param_node.declare_parameter('test_string', 'hello_world')
+        param_node.declare_parameter('test_bool', True)
+        param_node.declare_parameter('test_double', 3.14)
+        param_node.declare_parameter('test_array', [1, 2, 3, 4])
+
+        self.executor.add_node(param_node)
+
+        def params_condition(msg):
+            # Find the node with parameters
+            target_node = find_node(msg, node_name)
+            if not target_node:
+                return False
+
+            # Check that parameters are present
+            if len(target_node.parameters) == 0:
+                return False
+
+            # Create a dict of parameter names to values for easier checking
+            param_dict = {p.name: p.value for p in target_node.parameters}
+
+            # Verify expected parameters exist
+            expected_params = ['test_int', 'test_string', 'test_bool', 'test_double', 'test_array']
+            for param_name in expected_params:
+                if param_name not in param_dict:
+                    return False
+
+            # Verify parameter values and types
+            self.assertEqual(param_dict['test_int'].integer_value, 42)
+            self.assertEqual(param_dict['test_string'].string_value, 'hello_world')
+            self.assertEqual(param_dict['test_bool'].bool_value, True)
+            self.assertEqual(param_dict['test_double'].double_value, 3.14)
+            self.assertEqual(param_dict['test_array'].integer_array_value, [1, 2, 3, 4])
+
+            return True
+
+        success, messages = wait_for_message(
+            self.subscriber_node,
+            Graph,
+            '/rosgraph',
+            params_condition,
+            timeout_sec=5.0
+        )
+
+        self.assertTrue(
+            success,
+            f'Should have received graph update with node parameters for {node_name}. '
+            f'Received {len(messages)} messages.'
+        )
+
+        # Cleanup
+        self.cleanup_node(param_node)

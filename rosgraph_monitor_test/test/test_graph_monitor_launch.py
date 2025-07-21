@@ -26,7 +26,8 @@ import pytest
 import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_msgs.msg import Graph
+from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
+
 from std_msgs.msg import Bool
 
 from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message
@@ -113,19 +114,19 @@ class TestProcessOutput(unittest.TestCase):
             f'{context} should have correct QoS depth.'
         )
         self.assertEqual(
-            qos.history, 1,  # HISTORY_KEEP_LAST
+            qos.history, QosProfileMsg.HISTORY_KEEP_LAST,
             f'{context} should have HISTORY_KEEP_LAST policy.'
         )
         self.assertEqual(
-            qos.reliability, 1,  # RELIABILITY_RELIABLE
+            qos.reliability, QosProfileMsg.RELIABILITY_RELIABLE,
             f'{context} should have RELIABILITY_RELIABLE policy.'
         )
         self.assertEqual(
-            qos.durability, 1,  # DURABILITY_VOLATILE
+            qos.durability, QosProfileMsg.DURABILITY_VOLATILE,
             f'{context} should have DURABILITY_VOLATILE policy.'
         )
         self.assertEqual(
-            qos.liveliness, 1,  # LIVELINESS_AUTOMATIC
+            qos.liveliness, QosProfileMsg.LIVELINESS_AUTOMATIC,
             f'{context} should have LIVELINESS_AUTOMATIC policy.'
         )
         self.assertEqual(

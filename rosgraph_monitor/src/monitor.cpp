@@ -671,7 +671,8 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
   // Convert Duration fields - handle infinite durations
   auto deadline_rmw = qos_profile.deadline().to_rmw_time();
   if (rmw_time_equal(deadline_rmw, RMW_DURATION_INFINITE) ||
-      rmw_time_equal(deadline_rmw, RMW_DURATION_UNSPECIFIED)) {
+    rmw_time_equal(deadline_rmw, RMW_DURATION_UNSPECIFIED))
+  {
     qos_msg.deadline.sec = 0;
     qos_msg.deadline.nanosec = 0;
   } else {
@@ -681,7 +682,8 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
 
   auto lifespan_rmw = qos_profile.lifespan().to_rmw_time();
   if (rmw_time_equal(lifespan_rmw, RMW_DURATION_INFINITE) ||
-      rmw_time_equal(lifespan_rmw, RMW_DURATION_UNSPECIFIED)) {
+    rmw_time_equal(lifespan_rmw, RMW_DURATION_UNSPECIFIED))
+  {
     qos_msg.lifespan.sec = 0;
     qos_msg.lifespan.nanosec = 0;
   } else {
@@ -691,7 +693,8 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
 
   auto liveliness_lease_rmw = qos_profile.liveliness_lease_duration().to_rmw_time();
   if (rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_INFINITE) ||
-      rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_UNSPECIFIED)) {
+    rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_UNSPECIFIED))
+  {
     qos_msg.liveliness_lease_duration.sec = 0;
     qos_msg.liveliness_lease_duration.nanosec = 0;
   } else {

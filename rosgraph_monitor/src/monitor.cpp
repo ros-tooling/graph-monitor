@@ -610,6 +610,8 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
       qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_KEEP_ALL;
       break;
     case rclcpp::HistoryPolicy::Unknown:
+      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_UNKNOWN;
+      break;
     default:
       qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_SYSTEM_DEFAULT;
       break;
@@ -629,6 +631,8 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
       qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_BEST_EFFORT;
       break;
     case rclcpp::ReliabilityPolicy::Unknown:
+      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_UNKNOWN;
+      break;
     default:
       qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_SYSTEM_DEFAULT;
       break;
@@ -639,13 +643,15 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
     case rclcpp::DurabilityPolicy::SystemDefault:
       qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
       break;
-    case rclcpp::DurabilityPolicy::TransientLocal:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_TRANSIENT_LOCAL;
-      break;
     case rclcpp::DurabilityPolicy::Volatile:
       qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_VOLATILE;
       break;
+    case rclcpp::DurabilityPolicy::TransientLocal:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_TRANSIENT_LOCAL;
+      break;
     case rclcpp::DurabilityPolicy::Unknown:
+      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_UNKNOWN;
+      break;
     default:
       qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
       break;
@@ -669,40 +675,26 @@ rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
   }
 
   // Convert Duration fields - handle infinite durations
-  auto deadline_rmw = qos_profile.deadline().to_rmw_time();
-  if (rmw_time_equal(deadline_rmw, RMW_DURATION_INFINITE) ||
-    rmw_time_equal(deadline_rmw, RMW_DURATION_UNSPECIFIED))
-  {
-    qos_msg.deadline.sec = 0;
-    qos_msg.deadline.nanosec = 0;
-  } else {
-    qos_msg.deadline.sec = deadline_rmw.sec;
-    qos_msg.deadline.nanosec = deadline_rmw.nsec;
-  }
-
-  auto lifespan_rmw = qos_profile.lifespan().to_rmw_time();
-  if (rmw_time_equal(lifespan_rmw, RMW_DURATION_INFINITE) ||
-    rmw_time_equal(lifespan_rmw, RMW_DURATION_UNSPECIFIED))
-  {
-    qos_msg.lifespan.sec = 0;
-    qos_msg.lifespan.nanosec = 0;
-  } else {
-    qos_msg.lifespan.sec = lifespan_rmw.sec;
-    qos_msg.lifespan.nanosec = lifespan_rmw.nsec;
-  }
-
-  auto liveliness_lease_rmw = qos_profile.liveliness_lease_duration().to_rmw_time();
-  if (rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_INFINITE) ||
-    rmw_time_equal(liveliness_lease_rmw, RMW_DURATION_UNSPECIFIED))
-  {
-    qos_msg.liveliness_lease_duration.sec = 0;
-    qos_msg.liveliness_lease_duration.nanosec = 0;
-  } else {
-    qos_msg.liveliness_lease_duration.sec = liveliness_lease_rmw.sec;
-    qos_msg.liveliness_lease_duration.nanosec = liveliness_lease_rmw.nsec;
-  }
+  convert_duration_to_msg(qos_profile.deadline(), qos_msg.deadline);
+  convert_duration_to_msg(qos_profile.lifespan(), qos_msg.lifespan);
+  convert_duration_to_msg(qos_profile.liveliness_lease_duration(), qos_msg.liveliness_lease_duration);
 
   return qos_msg;
+}
+
+void RosGraphMonitor::convert_duration_to_msg(
+  const rclcpp::Duration & duration,
+  builtin_interfaces::msg::Duration & msg_duration)
+{
+  auto rmw_time = duration.to_rmw_time();
+  if (rmw_time_equal(rmw_time, RMW_DURATION_INFINITE) ||
+      rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED)) {
+    msg_duration.sec = 0;
+    msg_duration.nanosec = 0;
+  } else {
+    msg_duration.sec = rmw_time.sec;
+    msg_duration.nanosec = rmw_time.nsec;
+  }
 }
 
 void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)

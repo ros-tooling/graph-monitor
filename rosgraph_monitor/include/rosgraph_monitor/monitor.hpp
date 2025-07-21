@@ -237,6 +237,13 @@ protected:
   /// @return QoS profile in message format
   rosgraph_monitor_msgs::msg::QosProfile convert_qos_profile(const rclcpp::QoS & qos_profile);
 
+  /// @brief Helper method to convert duration handling infinite values
+  /// @param duration ROS2 duration to convert
+  /// @param msg_duration Output message duration field to populate
+  void convert_duration_to_msg(
+    const rclcpp::Duration & duration,
+    builtin_interfaces::msg::Duration & msg_duration);
+
   /* Members */
 
   // Configuration

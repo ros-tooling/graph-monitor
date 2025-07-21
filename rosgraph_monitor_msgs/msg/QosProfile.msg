@@ -4,6 +4,7 @@
 uint8 HISTORY_SYSTEM_DEFAULT=0
 uint8 HISTORY_KEEP_LAST=1
 uint8 HISTORY_KEEP_ALL=2
+uint8 HISTORY_UNKNOWN=3
 uint8 history
 
 # Depth of the message queue (only meaningful when history==KEEP_LAST)
@@ -17,14 +18,16 @@ builtin_interfaces/Duration lifespan
 
 # Reliability policy
 uint8 RELIABILITY_SYSTEM_DEFAULT=0
-uint8 RELIABILITY_BEST_EFFORT=1
-uint8 RELIABILITY_RELIABLE=2
+uint8 RELIABILITY_RELIABLE=1
+uint8 RELIABILITY_BEST_EFFORT=2
+uint8 RELIABILITY_UNKNOWN=3
 uint8 reliability
 
 # Durability policy
 uint8 DURABILITY_SYSTEM_DEFAULT=0
-uint8 DURABILITY_TRANSIENT_LOCAL=1
-uint8 DURABILITY_VOLATILE=2
+uint8 DURABILITY_VOLATILE=1
+uint8 DURABILITY_TRANSIENT_LOCAL=2
+uint8 DURABILITY_UNKNOWN=3
 uint8 durability
 
 # Liveliness policy

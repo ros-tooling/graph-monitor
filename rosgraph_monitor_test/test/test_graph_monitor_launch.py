@@ -117,11 +117,11 @@ class TestProcessOutput(unittest.TestCase):
             f'{context} should have HISTORY_KEEP_LAST policy.'
         )
         self.assertEqual(
-            qos.reliability, 2,  # RELIABILITY_RELIABLE
+            qos.reliability, 1,  # RELIABILITY_RELIABLE
             f'{context} should have RELIABILITY_RELIABLE policy.'
         )
         self.assertEqual(
-            qos.durability, 2,  # DURABILITY_VOLATILE
+            qos.durability, 1,  # DURABILITY_VOLATILE
             f'{context} should have DURABILITY_VOLATILE policy.'
         )
         self.assertEqual(

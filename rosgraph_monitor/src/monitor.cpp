@@ -742,7 +742,6 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
     }
 
     // Query parameters
-    if (node_) {
       try {
         // Extract namespace and node name from the full node name
         std::string node_namespace = "/";
@@ -757,6 +756,7 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
           // node_name_only = node_name.substr(1);
         // }
 
+        RCLCPP_INFO(logger_, "Querying parameters for node %s", node_name.c_str());
         // Create parameter client for this node
         auto parameter_client = std::make_shared<rclcpp::AsyncParametersClient>(
           node_,
@@ -799,7 +799,6 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
       } catch (const std::exception & e) {
         RCLCPP_DEBUG(logger_, "Failed to query parameters for node %s: %s", node_name.c_str(), e.what());
       }
-    }
 
     msg.nodes.push_back(node_msg);
   }

@@ -22,7 +22,6 @@
 
 #include "rclcpp/logging.hpp"
 
-
 std::size_t std::hash<RosRmwGid>::operator()(
   const RosRmwGid & id) const noexcept
 {
@@ -67,7 +66,6 @@ bool match_any_prefixes(const std::vector<std::string> & prefixes, const std::st
 
 }  // namespace
 
-
 namespace rosgraph_monitor
 {
 
@@ -75,10 +73,10 @@ std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE])
 {
   std::string result;
   result.resize(24 * 2 + 23);
-  snprintf(&result[0], 3, "%02x", gid[0]);  // NOLINT(runtime/printf)
+  snprintf(&result[0], 3, "%02x", gid[0]);   // NOLINT(runtime/printf)
   size_t pos = 2;
   for (size_t i = 1; i < 24; i++) {
-    snprintf(&result[pos], 4, ".%02x", gid[i]);  // NOLINT(runtime/printf)
+    snprintf(&result[pos], 4, ".%02x", gid[i]);   // NOLINT(runtime/printf)
     pos += 3;
   }
   return result;
@@ -89,14 +87,51 @@ std::string gid_to_str(const RosRmwGid & gid)
   return gid_to_str(&gid[0]);
 }
 
+void convert_maybe_inifite_durations(
+  const rclcpp::Duration & duration,
+  builtin_interfaces::msg::Duration & msg_duration)
+{
+  auto rmw_time = duration.to_rmw_time();
+  if (rmw_time_equal(rmw_time, RMW_DURATION_INFINITE) ||
+    rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED))
+  {
+    msg_duration.sec = 0;
+    msg_duration.nanosec = 0;
+  } else {
+    msg_duration.sec = rmw_time.sec;
+    msg_duration.nanosec = rmw_time.nsec;
+  }
+}
+
+rosgraph_monitor_msgs::msg::QosProfile qos_to_ros_message(
+  const rclcpp::QoS & qos_profile)
+{
+  rosgraph_monitor_msgs::msg::QosProfile qos_msg;
+
+  qos_msg.history = static_cast<uint8_t>(qos_profile.history());
+  qos_msg.reliability = static_cast<uint8_t>(qos_profile.reliability());
+  qos_msg.durability = static_cast<uint8_t>(qos_profile.durability());
+  qos_msg.liveliness = static_cast<uint8_t>(qos_profile.liveliness());
+
+  qos_msg.depth = qos_profile.depth();
+  // Convert Duration fields - handle infinite durations
+  convert_maybe_inifite_durations(qos_profile.deadline(), qos_msg.deadline);
+  convert_maybe_inifite_durations(qos_profile.lifespan(), qos_msg.lifespan);
+  convert_maybe_inifite_durations(
+    qos_profile.liveliness_lease_duration(), qos_msg.liveliness_lease_duration);
+
+  return qos_msg;
+}
+
 RosGraphMonitor::EndpointTracking::EndpointTracking(
   const std::string & topic_name,
   const rclcpp::TopicEndpointInfo & info,
   const rclcpp::Time & now)
 : topic_name(topic_name),
-  node_name(info.node_namespace() == "/" ?
-    info.node_namespace() + info.node_name() :
-    info.node_namespace() + "/" + info.node_name()),
+  node_name(
+    info.node_namespace() ==
+    "/" ? info.node_namespace() + info.node_name() : info.node_namespace() + "/" +
+    info.node_name()),
   info(info),
   last_stats_timestamp(now)
 {
@@ -155,7 +190,7 @@ void RosGraphMonitor::track_node_updates(
   const std::vector<std::string> & observed_node_names)
 {
   // Mark all stale as base state
-  for (auto & [node_name, tracking] : nodes_) {
+  for (auto &[node_name, tracking] : nodes_) {
     tracking.stale = true;
   }
   // Look at current node list, detect new and returned
@@ -178,7 +213,7 @@ void RosGraphMonitor::track_node_updates(
     }
   }
   // Check which nodes are still stale - they weren't observed
-  for (auto & [node_name, tracking] : nodes_) {
+  for (auto &[node_name, tracking] : nodes_) {
     if (tracking.stale && !tracking.missing) {
       RCLCPP_WARN(logger_, "Node %s went missing", node_name.c_str());
       tracking.missing = true;
@@ -200,7 +235,7 @@ std::optional<RosGraphMonitor::EndpointTrackingMap::iterator> RosGraphMonitor::a
     return std::nullopt;
   }
   auto [it, inserted] = publishers_.emplace(info.endpoint_gid(), proposed_tracking);
-  auto & [gid, tracking] = *it;
+  auto &[gid, tracking] = *it;
   publisher_lookup_.insert_or_assign(std::make_pair(tracking.node_name, tracking.topic_name), gid);
   if (inserted) {
     RCLCPP_DEBUG(
@@ -229,7 +264,7 @@ std::optional<RosGraphMonitor::EndpointTrackingMap::iterator> RosGraphMonitor::a
     return std::nullopt;
   }
   auto [it, inserted] = subscriptions_.emplace(info.endpoint_gid(), proposed_tracking);
-  auto & [gid, tracking] = *it;
+  auto &[gid, tracking] = *it;
   subscription_lookup_.insert_or_assign(
     std::make_pair(tracking.node_name, tracking.topic_name),
     gid);
@@ -266,23 +301,22 @@ bool RosGraphMonitor::topic_period_ok(
   return period_error <= allowed_error;
 }
 
-
 void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topics_and_types)
 {
   // Mark all stale as base state
-  for (auto & [gid, tracking] : publishers_) {
+  for (auto &[gid, tracking] : publishers_) {
     tracking.stale = true;
   }
-  for (auto & [gid, tracking] : subscriptions_) {
+  for (auto &[gid, tracking] : subscriptions_) {
     tracking.stale = true;
   }
-  for (auto & [topic_name, counts] : topic_endpoint_counts_) {
+  for (auto &[topic_name, counts] : topic_endpoint_counts_) {
     counts.pubs = 0;
     counts.subs = 0;
   }
 
   // Look over all currently observed topics for endpoint changes
-  for (const auto & [topic_name, topic_types] : observed_topics_and_types) {
+  for (const auto &[topic_name, topic_types] : observed_topics_and_types) {
     // Assumption: "multiple types on the topic" is an error already handled elsewhere
     bool count_topic =
       config_.continuity.ignore_topic_names.count(topic_name) == 0 &&
@@ -295,7 +329,7 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
       if (!maybe_it.has_value()) {
         continue;
       }
-      auto & [gid, tracking] = **maybe_it;
+      auto &[gid, tracking] = **maybe_it;
       if (count_topic) {
         endpoint_counts.pubs++;
       }
@@ -308,7 +342,7 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
       if (!maybe_it.has_value()) {
         continue;
       }
-      auto & [gid, tracking] = **maybe_it;
+      auto &[gid, tracking] = **maybe_it;
 
       bool count_subs_from_node =
         config_.continuity.ignore_subscriber_nodes.count(tracking.node_name) == 0;
@@ -324,7 +358,7 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
   // Also remove endpoints from missing node, that node missing is the important error.
   for (EndpointTrackingMap * endpoints : {&publishers_, &subscriptions_}) {
     for (auto it = endpoints->begin(); it != endpoints->end(); ) {
-      auto & [gid, tracking] = *it;
+      auto &[gid, tracking] = *it;
       const auto node_it = nodes_.find(tracking.node_name);
       bool node_not_tracked = node_it == nodes_.end();
       bool node_missing = node_not_tracked ? true : node_it->second.missing;
@@ -339,7 +373,7 @@ void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topi
   // Super basic graph continuity test - does not yet account for QoS mismatch
   if (config_.continuity.enable) {
     for (auto it = topic_endpoint_counts_.begin(); it != topic_endpoint_counts_.end(); ) {
-      auto & [topic_name, counts] = *it;
+      auto &[topic_name, counts] = *it;
       // Check counts to see if any pubs or subs don't have matches
       if (counts.pubs > 0 && counts.subs == 0) {
         pubs_with_no_subs_.insert(topic_name);
@@ -371,7 +405,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
     statusWrapper(nodes_status, DiagnosticStatus::OK, "Nodes OK", "nodes");
     size_t missing_optional_nodes = 0;
     size_t missing_required_nodes = 0;
-    for (const auto & [node_name, node_info] : nodes_) {
+    for (const auto &[node_name, node_info] : nodes_) {
       if (node_info.missing) {
         if (match_any_prefixes(config_.nodes.warn_only_prefixes, node_name)) {
           nodes_status.add("Optional node missing", node_name);
@@ -400,7 +434,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
   {
     diagnostic_updater::DiagnosticStatusWrapper continuity_status;
     statusWrapper(continuity_status, DiagnosticStatus::OK, "Graph continuity OK", "continuity");
-    for (const auto & [topic_name, counts] : topic_endpoint_counts_) {
+    for (const auto &[topic_name, counts] : topic_endpoint_counts_) {
       if (counts.pubs > 0 && subs_with_no_pubs_.erase(topic_name) > 0) {
         continuity_status.add("Dead sink cleared. Topic now has publisher(s).", topic_name);
       }
@@ -427,7 +461,8 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
   }
 
   // Frequency
-  auto deadline_not_set = [](const rclcpp::Duration & dur) {
+  auto deadline_not_set = [](const rclcpp::Duration & dur)
+    {
       return rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_INFINITE) ||
              rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_UNSPECIFIED);
     };
@@ -438,7 +473,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
 
     size_t pub_freq_errors = 0;
     size_t pub_freq_warns = 0;
-    for (const auto & [gid, tracking] : publishers_) {
+    for (const auto &[gid, tracking] : publishers_) {
       auto deadline = tracking.info.qos_profile().deadline();
       const std::string & topic = tracking.topic_name;
       bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
@@ -484,7 +519,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
       sub_freq_status, DiagnosticStatus::OK, "Receive frequencies OK", "receive_frequency");
     size_t sub_freq_errors = 0;
     size_t sub_freq_warns = 0;
-    for (const auto & [gid, tracking] : subscriptions_) {
+    for (const auto &[gid, tracking] : subscriptions_) {
       auto deadline = tracking.info.qos_profile().deadline();
       const std::string & topic = tracking.topic_name;
       bool stale = (now - tracking.last_stats_timestamp) > config_.topic_statistics.stale_timeout;
@@ -544,7 +579,6 @@ GraphMonitorConfiguration & RosGraphMonitor::config()
   return config_;
 }
 
-
 const GraphMonitorConfiguration & RosGraphMonitor::config() const
 {
   return config_;
@@ -573,7 +607,7 @@ void RosGraphMonitor::on_topic_statistics(const rosgraph_monitor_msgs::msg::Topi
     if (it == endpoints->end()) {
       continue;
     }
-    auto & [gid, tracking] = *it;
+    auto &[gid, tracking] = *it;
     tracking.last_stats_timestamp = rclcpp::Time(msg.timestamp, RCL_ROS_TIME);
     tracking.period_stat = stat;
   }
@@ -593,110 +627,14 @@ void RosGraphMonitor::statusWrapper(
   msg.hardware_id = "health";
 }
 
-rosgraph_monitor_msgs::msg::QosProfile RosGraphMonitor::convert_qos_profile(
-  const rclcpp::QoS & qos_profile)
+rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::tracking_to_ros_message(
+  const EndpointTracking & tracking)
 {
-  rosgraph_monitor_msgs::msg::QosProfile qos_msg;
-
-  // History policy
-  switch (qos_profile.history()) {
-    case rclcpp::HistoryPolicy::SystemDefault:
-      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_SYSTEM_DEFAULT;
-      break;
-    case rclcpp::HistoryPolicy::KeepLast:
-      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_KEEP_LAST;
-      break;
-    case rclcpp::HistoryPolicy::KeepAll:
-      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_KEEP_ALL;
-      break;
-    case rclcpp::HistoryPolicy::Unknown:
-      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_UNKNOWN;
-      break;
-    default:
-      qos_msg.history = rosgraph_monitor_msgs::msg::QosProfile::HISTORY_SYSTEM_DEFAULT;
-      break;
-  }
-
-  qos_msg.depth = qos_profile.depth();
-
-  // Reliability policy
-  switch (qos_profile.reliability()) {
-    case rclcpp::ReliabilityPolicy::SystemDefault:
-      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_SYSTEM_DEFAULT;
-      break;
-    case rclcpp::ReliabilityPolicy::Reliable:
-      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_RELIABLE;
-      break;
-    case rclcpp::ReliabilityPolicy::BestEffort:
-      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_BEST_EFFORT;
-      break;
-    case rclcpp::ReliabilityPolicy::Unknown:
-      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_UNKNOWN;
-      break;
-    default:
-      qos_msg.reliability = rosgraph_monitor_msgs::msg::QosProfile::RELIABILITY_SYSTEM_DEFAULT;
-      break;
-  }
-
-  // Durability policy
-  switch (qos_profile.durability()) {
-    case rclcpp::DurabilityPolicy::SystemDefault:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
-      break;
-    case rclcpp::DurabilityPolicy::Volatile:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_VOLATILE;
-      break;
-    case rclcpp::DurabilityPolicy::TransientLocal:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_TRANSIENT_LOCAL;
-      break;
-    case rclcpp::DurabilityPolicy::Unknown:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_UNKNOWN;
-      break;
-    default:
-      qos_msg.durability = rosgraph_monitor_msgs::msg::QosProfile::DURABILITY_SYSTEM_DEFAULT;
-      break;
-  }
-
-  // Liveliness policy
-  switch (qos_profile.liveliness()) {
-    case rclcpp::LivelinessPolicy::SystemDefault:
-      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_SYSTEM_DEFAULT;
-      break;
-    case rclcpp::LivelinessPolicy::Automatic:
-      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_AUTOMATIC;
-      break;
-    case rclcpp::LivelinessPolicy::ManualByTopic:
-      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_MANUAL_BY_TOPIC;
-      break;
-    case rclcpp::LivelinessPolicy::Unknown:
-    default:
-      qos_msg.liveliness = rosgraph_monitor_msgs::msg::QosProfile::LIVELINESS_SYSTEM_DEFAULT;
-      break;
-  }
-
-  // Convert Duration fields - handle infinite durations
-  convert_maybe_inifite_durations(qos_profile.deadline(), qos_msg.deadline);
-  convert_maybe_inifite_durations(qos_profile.lifespan(), qos_msg.lifespan);
-  convert_maybe_inifite_durations(
-    qos_profile.liveliness_lease_duration(), qos_msg.liveliness_lease_duration);
-
-  return qos_msg;
-}
-
-void RosGraphMonitor::convert_maybe_inifite_durations(
-  const rclcpp::Duration & duration,
-  builtin_interfaces::msg::Duration & msg_duration)
-{
-  auto rmw_time = duration.to_rmw_time();
-  if (rmw_time_equal(rmw_time, RMW_DURATION_INFINITE) ||
-    rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED))
-  {
-    msg_duration.sec = 0;
-    msg_duration.nanosec = 0;
-  } else {
-    msg_duration.sec = rmw_time.sec;
-    msg_duration.nanosec = rmw_time.nsec;
-  }
+  rosgraph_monitor_msgs::msg::Topic topic_msg;
+  topic_msg.name = tracking.topic_name;
+  topic_msg.type = tracking.info.topic_type();
+  topic_msg.qos = qos_to_ros_message(tracking.info.qos_profile());
+  return topic_msg;
 }
 
 void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
@@ -706,7 +644,7 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 
   RCLCPP_INFO(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
 
-  for (const auto & [node_name, node_info] : nodes_) {
+  for (const auto &[node_name, node_info] : nodes_) {
     if (ignore_node(node_name) || node_info.missing || node_info.stale) {
       continue;
     }
@@ -715,23 +653,17 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
     node_msg.name = node_name;
 
     // Add publishers for this node
-    for (const auto & [gid, tracking] : publishers_) {
+    for (const auto &[gid, tracking] : publishers_) {
       if (tracking.node_name == node_name) {
-        rosgraph_monitor_msgs::msg::Topic topic_msg;
-        topic_msg.name = tracking.topic_name;
-        topic_msg.type = tracking.info.topic_type();
-        topic_msg.qos = convert_qos_profile(tracking.info.qos_profile());
+        rosgraph_monitor_msgs::msg::Topic topic_msg = tracking_to_ros_message(tracking);
         node_msg.publishers.push_back(topic_msg);
       }
     }
 
     // Add subscriptions for this node
-    for (const auto & [gid, tracking] : subscriptions_) {
+    for (const auto &[gid, tracking] : subscriptions_) {
       if (tracking.node_name == node_name) {
-        rosgraph_monitor_msgs::msg::Topic topic_msg;
-        topic_msg.name = tracking.topic_name;
-        topic_msg.type = tracking.info.topic_type();
-        topic_msg.qos = convert_qos_profile(tracking.info.qos_profile());
+        rosgraph_monitor_msgs::msg::Topic topic_msg = tracking_to_ros_message(tracking);
         node_msg.subscriptions.push_back(topic_msg);
       }
     }
@@ -744,6 +676,5 @@ void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
 {
   graph_change_callback_ = callback;
 }
-
 
 }  // namespace rosgraph_monitor

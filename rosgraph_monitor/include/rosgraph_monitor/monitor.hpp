@@ -52,7 +52,6 @@ struct std::hash<std::pair<std::string, std::string>>
   std::size_t operator()(const std::pair<std::string, std::string> & value) const noexcept;
 };
 
-
 namespace rosgraph_monitor
 {
 
@@ -232,17 +231,10 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
-  /// @brief Convert ROS2 QoS profile to message format
-  /// @param qos_profile ROS2 QoS profile to convert
-  /// @return QoS profile in message format
-  rosgraph_monitor_msgs::msg::QosProfile convert_qos_profile(const rclcpp::QoS & qos_profile);
-
-  /// @brief Helper method to convert duration handling infinite values
-  /// @param duration ROS2 duration to convert
-  /// @param msg_duration Output message duration field to populate
-  void convert_maybe_inifite_durations(
-    const rclcpp::Duration & duration,
-    builtin_interfaces::msg::Duration & msg_duration);
+  /// @brief Convert EndpointTracking to message format
+  /// @param tracking EndpointTracking to convert
+  /// @return Topic message in message format
+  rosgraph_monitor_msgs::msg::Topic tracking_to_ros_message(const EndpointTracking & tracking);
 
   /* Members */
 
@@ -270,8 +262,8 @@ protected:
   std::unordered_set<std::string> ignored_nodes_;
   std::unordered_set<std::string> returned_nodes_;
   std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
-  std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
-  std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
+  std::unordered_set<std::string> pubs_with_no_subs_;   // a.k.a. "leaf topics"
+  std::unordered_set<std::string> subs_with_no_pubs_;   // a.k.a. "dead sinks"
 };
 
 }  // namespace rosgraph_monitor

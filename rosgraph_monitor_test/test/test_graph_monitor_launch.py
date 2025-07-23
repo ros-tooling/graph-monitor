@@ -24,7 +24,9 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
-from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
+from rosgraph_monitor_test.test_utils import (
+    create_random_node_name, find_node, wait_for_message_sync
+)
 from std_msgs.msg import Bool
 
 

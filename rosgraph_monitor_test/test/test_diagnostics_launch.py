@@ -43,15 +43,15 @@ def generate_test_description():
 
 
 class TestProcessOutput(unittest.TestCase):
-    def setUp(cls):
+    def setUp(self):
         # Initialize the ROS context for the test node
         rclpy.init()
-        cls.publisher_node = rclpy.create_node('publisher_node')
-        cls.subscriber_node = rclpy.create_node('subscriber_node')
+        self.publisher_node = rclpy.create_node('publisher_node')
+        self.subscriber_node = rclpy.create_node('subscriber_node')
 
-        cls.executor = rclpy.executors.MultiThreadedExecutor()
-        cls.executor.add_node(cls.publisher_node)
-        cls.executor.add_node(cls.subscriber_node)
+        self.executor = rclpy.executors.MultiThreadedExecutor()
+        self.executor.add_node(self.publisher_node)
+        self.executor.add_node(self.subscriber_node)
 
         # Configure QoS based on RMW implementation
         if os.environ.get('RMW_IMPLEMENTATION_WRAPPER') == 'rmw_stats_shim':
@@ -60,25 +60,24 @@ class TestProcessOutput(unittest.TestCase):
             qos = QoSProfile(depth=10)
 
         # Create publisher and timer to generate activity
-        cls.dummy_publisher = cls.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
-        cls.publish_timer = cls.publisher_node.create_timer(
-            timer_period_sec=0.1, callback=cls.publisher_callback)
+        self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
+        self.publish_timer = self.publisher_node.create_timer(
+            timer_period_sec=0.1, callback=self.publisher_callback)
 
-        cls.spin_thread = threading.Thread(target=cls.executor.spin)
-        cls.spin_thread.start()
+        self.spin_thread = threading.Thread(target=self.executor.spin)
+        self.spin_thread.start()
 
-    @classmethod
-    def publisher_callback(cls):
+    def publisher_callback(self):
         msg = Bool()
         msg.data = True
-        cls.dummy_publisher.publish(msg)
+        self.dummy_publisher.publish(msg)
 
-    def tearDown(cls):
+    def tearDown(self):
         # Shutdown the ROS context
-        cls.executor.shutdown()
-        cls.spin_thread.join()
-        cls.subscriber_node.destroy_node()
-        cls.publisher_node.destroy_node()
+        self.executor.shutdown()
+        self.spin_thread.join()
+        self.subscriber_node.destroy_node()
+        self.publisher_node.destroy_node()
         rclpy.shutdown()
 
     def test_diagnostics(self):

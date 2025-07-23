@@ -262,8 +262,8 @@ protected:
   std::unordered_set<std::string> ignored_nodes_;
   std::unordered_set<std::string> returned_nodes_;
   std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
-  std::unordered_set<std::string> pubs_with_no_subs_;   // a.k.a. "leaf topics"
-  std::unordered_set<std::string> subs_with_no_pubs_;   // a.k.a. "dead sinks"
+  std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
+  std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
 };
 
 }  // namespace rosgraph_monitor

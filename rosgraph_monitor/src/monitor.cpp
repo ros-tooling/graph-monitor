@@ -105,7 +105,7 @@ void convert_maybe_inifite_durations(
   }
 }
 
-rosgraph_monitor_msgs::msg::QosProfile qos_to_ros_message(
+rosgraph_monitor_msgs::msg::QosProfile to_msg(
   const rclcpp::QoS & qos_profile)
 {
   rosgraph_monitor_msgs::msg::QosProfile qos_msg;
@@ -136,6 +136,14 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
   info(info),
   last_stats_timestamp(now)
 {
+}
+
+rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg() {
+  rosgraph_monitor_msgs::msg::Topic topic_msg;
+  topic_msg.name = topic_name;
+  topic_msg.type = info.topic_type();
+  topic_msg.qos = rosgraph_monitor::to_msg(info.qos_profile());
+  return topic_msg;
 }
 
 RosGraphMonitor::RosGraphMonitor(
@@ -629,16 +637,6 @@ void RosGraphMonitor::statusWrapper(
   msg.hardware_id = "health";
 }
 
-rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::tracking_to_ros_message(
-  const EndpointTracking & tracking)
-{
-  rosgraph_monitor_msgs::msg::Topic topic_msg;
-  topic_msg.name = tracking.topic_name;
-  topic_msg.type = tracking.info.topic_type();
-  topic_msg.qos = qos_to_ros_message(tracking.info.qos_profile());
-  return topic_msg;
-}
-
 void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 {
   msg.timestamp = now_fn_();
@@ -655,17 +653,17 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
     node_msg.name = node_name;
 
     // Add publishers for this node
-    for (const auto & [gid, tracking] : publishers_) {
+    for (auto & [gid, tracking] : publishers_) {
       if (tracking.node_name == node_name) {
-        rosgraph_monitor_msgs::msg::Topic topic_msg = tracking_to_ros_message(tracking);
+        auto topic_msg = tracking.to_msg();
         node_msg.publishers.push_back(topic_msg);
       }
     }
 
     // Add subscriptions for this node
-    for (const auto & [gid, tracking] : subscriptions_) {
+    for (auto & [gid, tracking] : subscriptions_) {
       if (tracking.node_name == node_name) {
-        rosgraph_monitor_msgs::msg::Topic topic_msg = tracking_to_ros_message(tracking);
+        auto topic_msg = tracking.to_msg();
         node_msg.subscriptions.push_back(topic_msg);
       }
     }

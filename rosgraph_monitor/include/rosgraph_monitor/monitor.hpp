@@ -172,6 +172,8 @@ protected:
     rclcpp::Time last_stats_timestamp;
     std::optional<rosgraph_monitor_msgs::msg::TopicStatistic> period_stat;
 
+    rosgraph_monitor_msgs::msg::Topic to_msg();
+
     EndpointTracking(
       const std::string & topic_name,
       const rclcpp::TopicEndpointInfo & info,
@@ -230,11 +232,6 @@ protected:
     uint8_t level,
     const std::string & message,
     const std::string & subname) const;
-
-  /// @brief Convert EndpointTracking to message format
-  /// @param tracking EndpointTracking to convert
-  /// @return Topic message in message format
-  rosgraph_monitor_msgs::msg::Topic tracking_to_ros_message(const EndpointTracking & tracking);
 
   /* Members */
 

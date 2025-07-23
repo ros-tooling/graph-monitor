@@ -22,6 +22,7 @@
 
 #include "rclcpp/logging.hpp"
 
+
 std::size_t std::hash<RosRmwGid>::operator()(
   const RosRmwGid & id) const noexcept
 {
@@ -65,6 +66,7 @@ bool match_any_prefixes(const std::vector<std::string> & prefixes, const std::st
 }
 
 }  // namespace
+
 
 namespace rosgraph_monitor
 {
@@ -299,6 +301,7 @@ bool RosGraphMonitor::topic_period_ok(
   const auto allowed_error = chrono_deadline * config_.topic_statistics.deadline_allowed_error;
   return period_error <= allowed_error;
 }
+
 
 void RosGraphMonitor::track_endpoint_updates(const TopicsToTypes & observed_topics_and_types)
 {
@@ -572,11 +575,11 @@ bool RosGraphMonitor::wait_for_update(std::chrono::milliseconds timeout)
   return update_event_.check_and_clear();
 }
 
-
 GraphMonitorConfiguration & RosGraphMonitor::config()
 {
   return config_;
 }
+
 
 const GraphMonitorConfiguration & RosGraphMonitor::config() const
 {

@@ -21,7 +21,7 @@ import uuid
 
 def create_random_node_name():
     """Generate a random node name for testing."""
-    return f'test_node_{uuid.uuid4()}'
+    return f'test_node_{uuid.uuid4().hex}'
 
 
 def find_node(graph_msg, node_name):

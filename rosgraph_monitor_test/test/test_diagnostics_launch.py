@@ -67,7 +67,6 @@ class TestProcessOutput(unittest.TestCase):
         cls.spin_thread = threading.Thread(target=cls.executor.spin)
         cls.spin_thread.start()
 
-    @classmethod
     def publisher_callback(cls):
         msg = Bool()
         msg.data = True

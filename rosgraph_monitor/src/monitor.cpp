@@ -138,7 +138,8 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
 {
 }
 
-rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg() {
+rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
+{
   rosgraph_monitor_msgs::msg::Topic topic_msg;
   topic_msg.name = topic_name;
   topic_msg.type = info.topic_type();

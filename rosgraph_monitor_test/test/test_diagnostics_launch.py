@@ -1,4 +1,4 @@
-# Copyright 2024 Bonsai Robotics, Inc - All Rights Reserved
+# Copyright 2024 Polymath Robotics, Inc - All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import pytest
 import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_test.test_utils import wait_for_message
+from rosgraph_monitor_test.test_utils import wait_for_message_sync
 from std_msgs.msg import Bool
 
 
@@ -43,9 +43,7 @@ def generate_test_description():
 
 
 class TestProcessOutput(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
+    def setUp(cls):
         # Initialize the ROS context for the test node
         rclpy.init()
         cls.publisher_node = rclpy.create_node('publisher_node')
@@ -75,8 +73,7 @@ class TestProcessOutput(unittest.TestCase):
         msg.data = True
         cls.dummy_publisher.publish(msg)
 
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(cls):
         # Shutdown the ROS context
         cls.executor.shutdown()
         cls.spin_thread.join()
@@ -90,7 +87,7 @@ class TestProcessOutput(unittest.TestCase):
             return (len(msg.status) > 0 and
                     all(status.level == DiagnosticStatus.OK for status in msg.status))
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             DiagnosticArray,
             '/diagnostics_agg',

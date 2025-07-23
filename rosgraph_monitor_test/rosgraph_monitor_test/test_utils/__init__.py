@@ -1,4 +1,4 @@
-# Copyright 2024 Bonsai Robotics, Inc - All Rights Reserved
+# Copyright 2024 Polymath Robotics, Inc - All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,6 @@
 
 """Testing utilities for rosgraph_monitor package."""
 
-from .utils import create_random_node_name, find_node, wait_for_message
+from .utils import create_random_node_name, find_node, wait_for_message_sync
 
-__all__ = ['create_random_node_name', 'find_node', 'wait_for_message']
+__all__ = ['create_random_node_name', 'find_node', 'wait_for_message_sync']

@@ -1,4 +1,4 @@
-# Copyright 2024 Bonsai Robotics, Inc - All Rights Reserved
+# Copyright 2024 Polymath Robotics, Inc - All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
-from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message
+from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
 from std_msgs.msg import Bool
 
 
@@ -171,7 +171,7 @@ class TestProcessOutput(unittest.TestCase):
             )
             return True
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             Graph,
             '/rosgraph',
@@ -229,7 +229,7 @@ class TestProcessOutput(unittest.TestCase):
             self.assert_qos_properties(publisher.qos, expected_depth=10, context='Publisher')
             return True
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             Graph,
             '/rosgraph',
@@ -305,7 +305,7 @@ class TestProcessOutput(unittest.TestCase):
             self.assert_qos_properties(subscription.qos, expected_depth=10, context='Subscription')
             return True
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             Graph,
             '/rosgraph',
@@ -329,7 +329,7 @@ class TestProcessOutput(unittest.TestCase):
         def new_node_condition(msg):
             return find_node(msg, node_name) is not None
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             Graph,
             '/rosgraph',
@@ -353,7 +353,7 @@ class TestProcessOutput(unittest.TestCase):
 
             return False
 
-        success, messages = wait_for_message(
+        success, messages = wait_for_message_sync(
             self.subscriber_node,
             Graph,
             '/rosgraph',

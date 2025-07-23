@@ -1,4 +1,4 @@
-# Copyright 2024 Bonsai Robotics, Inc - All Rights Reserved
+# Copyright 2024 Polymath Robotics, Inc - All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@ import os
 import time
 
 import rclpy
+import uuid
 
 
 def create_random_node_name():
     """Generate a random node name for testing."""
-    return f'test_node_{int(time.time() * 1000)}_{os.getpid()}'
+    return f'test_node_{uuid.uuid4()}'
 
 
 def find_node(graph_msg, node_name):
@@ -43,7 +44,7 @@ def find_node(graph_msg, node_name):
     return None
 
 
-def wait_for_message(node, message_type, topic, condition_func, timeout_sec=5.0):
+def wait_for_message_sync(node, message_type, topic, condition_func, timeout_sec=5.0):
     """
     Wait for a message that meets a condition or timeout.
 

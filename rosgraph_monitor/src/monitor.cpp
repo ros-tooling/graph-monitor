@@ -73,10 +73,10 @@ std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE])
 {
   std::string result;
   result.resize(24 * 2 + 23);
-  snprintf(&result[0], 3, "%02x", gid[0]);   // NOLINT(runtime/printf)
+  snprintf(&result[0], 3, "%02x", gid[0]);  // NOLINT(runtime/printf)
   size_t pos = 2;
   for (size_t i = 1; i < 24; i++) {
-    snprintf(&result[pos], 4, ".%02x", gid[i]);   // NOLINT(runtime/printf)
+    snprintf(&result[pos], 4, ".%02x", gid[i]);  // NOLINT(runtime/printf)
     pos += 3;
   }
   return result;
@@ -128,10 +128,9 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
   const rclcpp::TopicEndpointInfo & info,
   const rclcpp::Time & now)
 : topic_name(topic_name),
-  node_name(
-    info.node_namespace() ==
-    "/" ? info.node_namespace() + info.node_name() : info.node_namespace() + "/" +
-    info.node_name()),
+  node_name(info.node_namespace() == "/" ?
+    info.node_namespace() + info.node_name() :
+    info.node_namespace() + "/" + info.node_name()),
   info(info),
   last_stats_timestamp(now)
 {
@@ -461,8 +460,7 @@ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatu
   }
 
   // Frequency
-  auto deadline_not_set = [](const rclcpp::Duration & dur)
-    {
+  auto deadline_not_set = [](const rclcpp::Duration & dur) {
       return rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_INFINITE) ||
              rmw_time_equal(dur.to_rmw_time(), RMW_DURATION_UNSPECIFIED);
     };
@@ -573,6 +571,7 @@ bool RosGraphMonitor::wait_for_update(std::chrono::milliseconds timeout)
   update_event_.wait_for(timeout);
   return update_event_.check_and_clear();
 }
+
 
 GraphMonitorConfiguration & RosGraphMonitor::config()
 {

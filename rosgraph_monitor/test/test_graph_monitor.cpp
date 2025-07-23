@@ -259,7 +259,11 @@ protected:
       });
 
     auto logger = logger_.get_child("graphmon");
-    graphmon_.emplace(node_graph_, [this]() {return now_;}, logger);
+    graphmon_.emplace(
+      node_graph_, [this]() {return now_;}, logger, [](const std::string & node_name) {
+        // TODO(troy): Fill in with assertable testing data
+        return std::nullopt;
+      });
   }
 
   void trigger_and_wait()

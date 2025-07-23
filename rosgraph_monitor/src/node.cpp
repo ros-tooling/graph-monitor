@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <string>
 
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
@@ -67,6 +68,7 @@ Node::Node(const rclcpp::NodeOptions & options)
     get_node_graph_interface(),
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
+    std::bind(&Node::query_params, this, std::placeholders::_1),
     create_graph_monitor_config(params_)),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
@@ -101,6 +103,27 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   params_ = params;
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
+
+std::optional<std::vector<std::string>> Node::query_params(const std::string & node_name)
+{
+  auto param_client =
+    std::make_shared<rclcpp::AsyncParametersClient>(shared_from_this(), node_name);
+
+  if (!param_client->wait_for_service(std::chrono::milliseconds(50))) {
+    return std::nullopt;
+  }
+
+  auto result = param_client->list_parameters({}, 0);
+  if (rclcpp::spin_until_future_complete(shared_from_this(), result) !=
+    rclcpp::FutureReturnCode::SUCCESS)
+  {
+    return std::nullopt;
+  }
+
+  std::vector<std::string> param_names = result.get().names;
+  return param_names;
+}
+
 
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)
 {

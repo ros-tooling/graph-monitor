@@ -66,13 +66,16 @@ class TestProcessOutput(unittest.TestCase):
         cls.subscriber_node.destroy_node()
 
     def add_node(self, node_name=None):
-        """Create and add a new ROS node to the executor.
+        """
+        Create and add a new ROS node to the executor.
 
         Args:
             node_name: Optional node name. If None, generates a random name.
 
-        Returns:
+        Returns
+        -------
             tuple: (node, node_name) - The created ROS node and its name
+
         """
         if node_name is None:
             node_name = create_random_node_name()
@@ -82,12 +85,15 @@ class TestProcessOutput(unittest.TestCase):
         return new_node, node_name
 
     def cleanup_node(self, node, publisher=None, subscription=None):
-        """Clean up a ROS node and optionally its publisher or subscription.
+        """
+        Clean up a ROS node and optionally its publisher or subscription.
 
         Args:
+        ----
             node: The ROS node to clean up
             publisher: Optional publisher to destroy first
             subscription: Optional subscription to destroy first
+
         """
         if publisher is not None:
             node.destroy_publisher(publisher)
@@ -101,9 +107,11 @@ class TestProcessOutput(unittest.TestCase):
         Assert QoS properties match expected default values.
 
         Args:
+        ----
             qos: QoS profile object from graph message
             expected_depth: Expected queue depth (default: 10)
             context: Context string for error messages (e.g., 'Publisher', 'Subscription')
+
         """
         self.assertEqual(
             qos.depth, expected_depth,

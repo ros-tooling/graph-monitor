@@ -24,14 +24,17 @@ def create_random_node_name():
 
 
 def find_node(graph_msg, node_name):
-    """Find a node in the graph message by name.
+    """
+    Find a node in the graph message by name.
 
     Args:
         graph_msg: Graph message from rosgraph_monitor
         node_name: Name of the node to find (with or without leading '/')
 
-    Returns:
+    Returns
+    -------
         Node object if found, None otherwise
+
     """
     # Ensure node_name starts with '/'
     if not node_name.startswith('/'):

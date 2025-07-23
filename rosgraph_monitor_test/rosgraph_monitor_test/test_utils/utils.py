@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import time
+import uuid
 
 import rclpy
-import uuid
 
 
 def create_random_node_name():

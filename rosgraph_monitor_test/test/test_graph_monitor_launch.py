@@ -70,7 +70,7 @@ class TestProcessOutput(unittest.TestCase):
         Create and add a new ROS node to the executor.
 
         Args:
-            node_name: Optional node name. If None, generates a random name.
+            node_name (str, optional): If None, generates a random name.
 
         Returns
         -------
@@ -89,10 +89,15 @@ class TestProcessOutput(unittest.TestCase):
         Clean up a ROS node and optionally its publisher or subscription.
 
         Args:
-        ----
-            node: The ROS node to clean up
-            publisher: Optional publisher to destroy first
-            subscription: Optional subscription to destroy first
+            node (rclpy.node.Node): The ROS node to clean up.
+            publisher (rclpy.Publisher, optional): If given, this publisher will
+            be destroyed first.
+            subscription (rclpy.Subscription, optional): If given, this
+            subscription will be destroyed first.
+
+        Returns
+        -------
+            None
 
         """
         if publisher is not None:
@@ -107,10 +112,14 @@ class TestProcessOutput(unittest.TestCase):
         Assert QoS properties match expected default values.
 
         Args:
-        ----
-            qos: QoS profile object from graph message
-            expected_depth: Expected queue depth (default: 10)
-            context: Context string for error messages (e.g., 'Publisher', 'Subscription')
+            qos (rclpy.qos.QoSProfile): The QoS profile object from a graph message.
+            expected_depth (int, optional): The expected queue depth (default: 10).
+            context (str, optional): Context string for error messages (e.g.,
+            'Publisher', 'Subscription').
+
+        Returns
+        -------
+            None
 
         """
         self.assertEqual(

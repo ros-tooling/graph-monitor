@@ -43,6 +43,7 @@ def generate_test_description():
 
 
 class TestProcessOutput(unittest.TestCase):
+
     def setUp(self):
         # Initialize the ROS context for the test node
         rclpy.init()

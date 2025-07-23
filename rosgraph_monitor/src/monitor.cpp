@@ -643,7 +643,7 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
   msg.timestamp = now_fn_();
   msg.nodes.clear();
 
-  RCLCPP_INFO(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
+  RCLCPP_DEBUG(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
 
   for (const auto & [node_name, node_info] : nodes_) {
     if (ignore_node(node_name) || node_info.missing || node_info.stale) {

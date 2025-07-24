@@ -19,8 +19,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #include "rclcpp/logging.hpp"
+#include "rclcpp/parameter_client.hpp"
 
 
 std::size_t std::hash<RosRmwGid>::operator()(
@@ -151,12 +153,16 @@ RosGraphMonitor::RosGraphMonitor(
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
   std::function<rclcpp::Time()> now_fn,
   rclcpp::Logger logger,
-  GraphMonitorConfiguration config)
+  std::function<std::optional<std::vector<std::string>>(
+    const std::string & node_name)> query_params,
+  GraphMonitorConfiguration config
+)
 : config_(config),
   now_fn_(now_fn),
   node_graph_(node_graph),
   logger_(logger),
-  graph_change_event_(node_graph->get_graph_event())
+  graph_change_event_(node_graph->get_graph_event()),
+  query_params_(query_params)
 {
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
@@ -212,6 +218,13 @@ void RosGraphMonitor::track_node_updates(
     auto [it, inserted] = nodes_.emplace(node_name, NodeTracking{});
     if (inserted) {
       RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
+      auto params = query_params_(node_name);
+      if (params.has_value()) {
+        it->second.params = *params;
+        RCLCPP_DEBUG(logger_, "Node %s has parameters: %zu", node_name.c_str(), params->size());
+      } else {
+        RCLCPP_DEBUG(logger_, "Node %s is unresponsive to parameter queries", node_name.c_str());
+      }
     } else {
       NodeTracking & tracking = it->second;
       tracking.stale = false;

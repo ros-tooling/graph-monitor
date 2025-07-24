@@ -106,15 +106,19 @@ class RosGraphMonitor
 {
 public:
   /// @brief Constructor
-  /// @param config Includes/excludes the entities to care about in diagnostic reporting
-  /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param node_graph Interface from owning Node to retrieve information about the ROS graph
+  /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param logger
+  /// @param config Includes/excludes the entities to care about in diagnostic reporting
+  /// @param query_params Function to query parameters of a node by name
   RosGraphMonitor(
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
+    std::function<std::optional<std::vector<std::string>>(
+      const std::string & node_name)> query_params,
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{}
+  );
 
   virtual ~RosGraphMonitor();
 
@@ -152,6 +156,7 @@ protected:
   {
     bool missing = false;
     bool stale = false;
+    std::vector<std::string> params;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time
@@ -240,6 +245,8 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
+  std::function<std::optional<std::vector<std::string>>(const std::string & node_name)>
+  query_params_;
 
   // Execution model
   std::atomic_bool shutdown_ = false;

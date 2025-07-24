@@ -89,6 +89,42 @@ std::string gid_to_str(const RosRmwGid & gid)
   return gid_to_str(&gid[0]);
 }
 
+void convert_maybe_inifite_durations(
+  const rclcpp::Duration & duration,
+  builtin_interfaces::msg::Duration & msg_duration)
+{
+  auto rmw_time = duration.to_rmw_time();
+  if (rmw_time_equal(rmw_time, RMW_DURATION_INFINITE) ||
+    rmw_time_equal(rmw_time, RMW_DURATION_UNSPECIFIED))
+  {
+    msg_duration.sec = 0;
+    msg_duration.nanosec = 0;
+  } else {
+    msg_duration.sec = rmw_time.sec;
+    msg_duration.nanosec = rmw_time.nsec;
+  }
+}
+
+rosgraph_monitor_msgs::msg::QosProfile to_msg(
+  const rclcpp::QoS & qos_profile)
+{
+  rosgraph_monitor_msgs::msg::QosProfile qos_msg;
+
+  qos_msg.history = static_cast<uint8_t>(qos_profile.history());
+  qos_msg.reliability = static_cast<uint8_t>(qos_profile.reliability());
+  qos_msg.durability = static_cast<uint8_t>(qos_profile.durability());
+  qos_msg.liveliness = static_cast<uint8_t>(qos_profile.liveliness());
+
+  qos_msg.depth = qos_profile.depth();
+  // Convert Duration fields - handle infinite durations
+  convert_maybe_inifite_durations(qos_profile.deadline(), qos_msg.deadline);
+  convert_maybe_inifite_durations(qos_profile.lifespan(), qos_msg.lifespan);
+  convert_maybe_inifite_durations(
+    qos_profile.liveliness_lease_duration(), qos_msg.liveliness_lease_duration);
+
+  return qos_msg;
+}
+
 RosGraphMonitor::EndpointTracking::EndpointTracking(
   const std::string & topic_name,
   const rclcpp::TopicEndpointInfo & info,
@@ -100,6 +136,15 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
   info(info),
   last_stats_timestamp(now)
 {
+}
+
+rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
+{
+  rosgraph_monitor_msgs::msg::Topic topic_msg;
+  topic_msg.name = topic_name;
+  topic_msg.type = info.topic_type();
+  topic_msg.qos = rosgraph_monitor::to_msg(info.qos_profile());
+  return topic_msg;
 }
 
 RosGraphMonitor::RosGraphMonitor(
@@ -598,13 +643,32 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
   msg.timestamp = now_fn_();
   msg.nodes.clear();
 
+  RCLCPP_DEBUG(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
+
   for (const auto & [node_name, node_info] : nodes_) {
-    if (ignore_node(node_name)) {
+    if (ignore_node(node_name) || node_info.missing || node_info.stale) {
       continue;
     }
 
     rosgraph_monitor_msgs::msg::NodeInfo node_msg;
     node_msg.name = node_name;
+
+    // Add publishers for this node
+    for (auto & [gid, tracking] : publishers_) {
+      if (tracking.node_name == node_name) {
+        auto topic_msg = tracking.to_msg();
+        node_msg.publishers.push_back(topic_msg);
+      }
+    }
+
+    // Add subscriptions for this node
+    for (auto & [gid, tracking] : subscriptions_) {
+      if (tracking.node_name == node_name) {
+        auto topic_msg = tracking.to_msg();
+        node_msg.subscriptions.push_back(topic_msg);
+      }
+    }
+
     msg.nodes.push_back(node_msg);
   }
 }

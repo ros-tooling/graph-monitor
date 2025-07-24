@@ -31,6 +31,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   msg/NodeInfo.msg
   msg/Graph.msg
+  msg/QosProfile.msg
+  msg/Topic.msg
   msg/TopicStatistic.msg
   msg/TopicStatistics.msg
   DEPENDENCIES
@@ -39,7 +41,22 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(rclcpp REQUIRED)
+
   ament_lint_auto_find_test_dependencies()
+
+  ament_add_gtest(test_qos_profile_constants
+    test/test_qos_profile_constants.cpp
+  )
+
+  target_link_libraries(test_qos_profile_constants
+    rclcpp::rclcpp
+  )
+
+  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  target_link_libraries(test_qos_profile_constants "${cpp_typesupport_target}")
+
 endif()
 
 ament_package()

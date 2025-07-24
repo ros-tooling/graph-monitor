@@ -33,6 +33,7 @@
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
+#include "rosgraph_monitor_msgs/msg/qos_profile.hpp"
 
 #include "rosgraph_monitor/event.hpp"
 
@@ -50,7 +51,6 @@ struct std::hash<std::pair<std::string, std::string>>
 {
   std::size_t operator()(const std::pair<std::string, std::string> & value) const noexcept;
 };
-
 
 namespace rosgraph_monitor
 {
@@ -171,6 +171,8 @@ protected:
 
     rclcpp::Time last_stats_timestamp;
     std::optional<rosgraph_monitor_msgs::msg::TopicStatistic> period_stat;
+
+    rosgraph_monitor_msgs::msg::Topic to_msg();
 
     EndpointTracking(
       const std::string & topic_name,

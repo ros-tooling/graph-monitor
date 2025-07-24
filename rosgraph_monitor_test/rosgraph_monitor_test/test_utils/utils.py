@@ -1,4 +1,4 @@
-# Copyright 2024 Polymath Robotics, Inc - All Rights Reserved
+# Copyright 2025 Polymath Robotics, Inc - All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import time
+import uuid
 
 import rclpy
-import uuid
 
 
 def create_random_node_name():
@@ -25,14 +24,17 @@ def create_random_node_name():
 
 
 def find_node(graph_msg, node_name):
-    """Find a node in the graph message by name.
+    """
+    Find a node in the graph message by name.
 
     Args:
         graph_msg: Graph message from rosgraph_monitor
         node_name: Name of the node to find (with or without leading '/')
 
-    Returns:
+    Returns
+    -------
         Node object if found, None otherwise
+
     """
     # Ensure node_name starts with '/'
     if not node_name.startswith('/'):

@@ -68,7 +68,8 @@ Node::Node(const rclcpp::NodeOptions & options)
     get_node_graph_interface(),
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
-    std::bind(&Node::query_params, this, std::placeholders::_1),
+    std::bind(
+      &Node::query_params, this, std::placeholders::_1),
     create_graph_monitor_config(params_)),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
@@ -94,6 +95,9 @@ Node::Node(const rclcpp::NodeOptions & options)
   // Set up callback to publish rosgraph when nodes change
   graph_monitor_.set_graph_change_callback(std::bind(&Node::publish_rosgraph, this));
 
+  // Start monitoring after Node is fully constructed
+  graph_monitor_.start();
+
   // Publish initial rosgraph state
   publish_rosgraph();
 }
@@ -104,24 +108,52 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
-std::optional<std::vector<std::string>> Node::query_params(const std::string & node_name)
+// How to handle retry? Should immediately return a future?
+std::shared_future<rcl_interfaces::msg::ListParametersResult> Node::query_params(
+  const std::string & node_name)
 {
-  auto param_client =
-    std::make_shared<rclcpp::AsyncParametersClient>(shared_from_this(), node_name);
+  try {
+    // Check if node is initialized with shared_from_this()
+    std::weak_ptr<rclcpp::Node> weak_node = weak_from_this();
+    if (!weak_node.lock()) {
+      RCLCPP_ERROR(get_logger(), "Node is not initialized, cannot query parameters for %s",
+                   node_name.c_str());
+      throw std::runtime_error("Node not initialized");
+    }
 
-  if (!param_client->wait_for_service(std::chrono::milliseconds(50))) {
-    return std::nullopt;
+    auto param_client =
+      std::make_shared<rclcpp::AsyncParametersClient>(shared_from_this(), node_name);
+
+    // if (!param_client->wait_for_service(std::chrono::milliseconds(50))) {
+    // return std::nullopt;
+    // }
+
+    std::shared_future<rcl_interfaces::msg::ListParametersResult> result = param_client->list_parameters({}, 0);
+    RCLCPP_INFO(
+      get_logger(), "Created parameter client for node %s, will query parameters",
+      node_name.c_str());
+
+    // Get value from future
+    // result.wait();
+    // if (result.valid() && result.get().names.empty()) {
+      // RCLCPP_WARN(get_logger(), "No parameters found for node %s", node_name.c_str());
+      // return result;
+    // }
+
+    // Log the parameters found
+    // RCLCPP_INFO(
+      // get_logger(), "Found %zu parameters for node %s",
+      // result.get().names.size(), node_name.c_str());
+
+    return result;
+  } catch (const std::bad_weak_ptr& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to create parameter client for node %s: %s",
+                 node_name.c_str(), e.what());
+    // Return an invalid future that will throw when accessed
+    std::promise<rcl_interfaces::msg::ListParametersResult> promise;
+    promise.set_exception(std::make_exception_ptr(e));
+    return promise.get_future().share();
   }
-
-  auto result = param_client->list_parameters({}, 0);
-  if (rclcpp::spin_until_future_complete(shared_from_this(), result) !=
-    rclcpp::FutureReturnCode::SUCCESS)
-  {
-    return std::nullopt;
-  }
-
-  std::vector<std::string> param_names = result.get().names;
-  return param_names;
 }
 
 

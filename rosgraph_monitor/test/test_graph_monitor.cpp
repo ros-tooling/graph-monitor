@@ -154,6 +154,15 @@ static rclcpp::TopicEndpointInfo blank_info()
   return rclcpp::TopicEndpointInfo{cinfo};
 }
 
+struct MockedNode
+{
+  std::string name;
+  std::vector<std::string> params;
+
+  MockedNode(const std::string & name, const std::vector<std::string> & params = {})
+  : name(name), params(params) {}
+};
+
 struct Endpoint
 {
   std::string topic_name;
@@ -194,7 +203,11 @@ protected:
     EXPECT_CALL(*node_graph_, get_node_names)
     .WillRepeatedly(
       [this]() {
-        return node_names_;
+        std::vector<std::string> node_names;
+        for (const auto & node : mocked_nodes_) {
+          node_names.push_back(node.name);
+        }
+        return node_names;
       });
     EXPECT_CALL(*node_graph_, get_topic_names_and_types_mock_)
     .WillRepeatedly(
@@ -259,10 +272,24 @@ protected:
       });
 
     auto logger = logger_.get_child("graphmon");
+
+
     graphmon_.emplace(
-      node_graph_, [this]() {return now_;}, logger, [](const std::string & node_name) {
-        // TODO(troy): Fill in with assertable testing data
-        return std::nullopt;
+      node_graph_, [this]() {return now_;}, logger, [this](const std::string & node_name) {
+        std::vector<std::string> param_names;
+        for (const auto & node : mocked_nodes_) {
+          if (node.name == node_name) {
+            for (const auto & param : node.params) {
+              param_names.push_back(param);
+            }
+          }
+        }
+
+        rcl_interfaces::msg::ListParametersResult result{};
+        result.names = param_names;
+        std::promise<rcl_interfaces::msg::ListParametersResult> promise;
+        promise.set_value(result);
+        return promise.get_future().share();
       });
   }
 
@@ -272,13 +299,24 @@ protected:
     ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(10)));
   }
 
+
   void set_node_names(std::vector<std::string> node_names)
   {
-    // Add the root namespace / onto the names, which should not be specified with it
-    node_names_.clear();
-    node_names_.reserve(node_names.size());
+    std::vector<MockedNode> nodes;
+    nodes.reserve(node_names.size());
     for (const auto & name : node_names) {
-      node_names_.push_back("/" + name);
+      nodes.emplace_back("/" + name);
+    }
+    set_nodes(nodes);
+  }
+
+  void set_nodes(std::vector<MockedNode> nodes)
+  {
+    // Add the root namespace / onto the names, which should not be specified with it
+    mocked_nodes_.clear();
+    mocked_nodes_.reserve(nodes.size());
+    for (const auto & node : nodes) {
+      mocked_nodes_.push_back(node);
     }
     trigger_and_wait();
   }
@@ -389,7 +427,7 @@ protected:
   const std::string default_node_name_ = "testy0";
   const std::string default_topic_name_ = "/topic1";
   const rclcpp::QoS default_qos_{10};
-  std::vector<std::string> node_names_;
+  std::vector<MockedNode> mocked_nodes_;
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
@@ -772,4 +810,33 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
   }
 
   EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2"));
+}
+
+TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
+  // Set up some nodes, including one that should be warn-only
+  std::vector<MockedNode> mocked_nodes{
+    MockedNode("/node1", {"param1", "param2"}),
+  };
+
+  set_nodes(mocked_nodes);
+
+  // Generate rosgraph message
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
+  graphmon_->fill_rosgraph_msg(rosgraph_msg);
+
+  // Verify the message contains only non-warn-only nodes
+  EXPECT_EQ(rosgraph_msg.nodes.size(), 1);
+
+  auto node = rosgraph_msg.nodes.front();
+  EXPECT_EQ(node.name, "/node1");
+
+  // Verify parameters are present
+  EXPECT_EQ(node.parameters.size(), 2);
+
+  std::vector<std::string> param_names{};
+  for (const auto & param : node.parameters) {
+    param_names.push_back(param.name);
+  }
+  EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
+
 }

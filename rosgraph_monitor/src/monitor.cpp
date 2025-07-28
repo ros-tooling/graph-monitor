@@ -153,8 +153,7 @@ RosGraphMonitor::RosGraphMonitor(
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
   std::function<rclcpp::Time()> now_fn,
   rclcpp::Logger logger,
-  std::function<std::optional<std::vector<std::string>>(
-    const std::string & node_name)> query_params,
+  QueryParams query_params,
   GraphMonitorConfiguration config
 )
 : config_(config),
@@ -164,8 +163,8 @@ RosGraphMonitor::RosGraphMonitor(
   graph_change_event_(node_graph->get_graph_event()),
   query_params_(query_params)
 {
-  update_graph();
-  watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
+  // Don't start monitoring here - wait for explicit start() call
+  // to ensure Node is fully constructed before using shared_from_this()
 }
 
 RosGraphMonitor::~RosGraphMonitor()
@@ -175,7 +174,9 @@ RosGraphMonitor::~RosGraphMonitor()
   graph_change_event_->set();
   node_graph_->notify_shutdown();
   update_event_.set();
-  watch_thread_.join();
+  if (watch_thread_.joinable()) {
+    watch_thread_.join();
+  }
 }
 
 void RosGraphMonitor::update_graph()
@@ -202,6 +203,47 @@ bool RosGraphMonitor::ignore_node(const std::string & node_name)
   return false;
 }
 
+void RosGraphMonitor::trigger_params_futures(QueryParamsReturnType params_future)
+{
+  // Capture necessary data by value to avoid lifetime issues
+  auto logger = logger_;
+  auto callback = graph_change_callback_;
+
+  // Check if future is valid
+  if (!params_future.valid()) {
+    RCLCPP_ERROR(logger, "Invalid future provided to trigger_params_futures");
+  } else {
+    RCLCPP_INFO(logger, "Triggering parameter query for future");
+  }
+
+  std::async(std::launch::async, [logger, callback, &params_future]() {
+    try {
+      // Check if future is still valid
+      if (!params_future.valid()) {
+        RCLCPP_ERROR(logger, "Future is no longer valid, skipping parameter query");
+      } else {
+        RCLCPP_INFO(logger, "Waiting for parameters to be available...");
+      }
+      // TODO(troy): Some retry logic here?
+      // Wait the future to complete
+      RCLCPP_INFO(logger, "Waiting for parameters to be available...");
+      if (params_future.wait_for(std::chrono::seconds(1)) != std::future_status::ready) {
+        RCLCPP_WARN(logger, "Parameters not available in time, skipping.");
+        return;
+      }
+      auto result = params_future.get();
+      RCLCPP_INFO(logger, "Got parameters for node: %zu", result.names.size());
+
+      // Only trigger callback if we successfully got parameters
+      if (callback) {
+        callback();
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_INFO(logger, "Failed to get parameters: %s", e.what());
+    }
+  });
+}
+
 void RosGraphMonitor::track_node_updates(
   const std::vector<std::string> & observed_node_names)
 {
@@ -217,14 +259,32 @@ void RosGraphMonitor::track_node_updates(
 
     auto [it, inserted] = nodes_.emplace(node_name, NodeTracking{});
     if (inserted) {
-      RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
-      auto params = query_params_(node_name);
-      if (params.has_value()) {
-        it->second.params = *params;
-        RCLCPP_DEBUG(logger_, "Node %s has parameters: %zu", node_name.c_str(), params->size());
-      } else {
-        RCLCPP_DEBUG(logger_, "Node %s is unresponsive to parameter queries", node_name.c_str());
+      RCLCPP_INFO(logger_, "New node: %s", node_name.c_str());
+      // trigger_params_futures(
+        // query_params_(node_name));  // Trigger parameter query for the new node
+
+      auto params_future = query_params_(node_name);
+      try {
+        if (!params_future.valid()) {
+          RCLCPP_ERROR(logger_, "Invalid future returned for node %s", node_name.c_str());
+          continue;
+        }
+        params_future.wait();  // Wait for the future to be ready
+        auto result = params_future.get();
+      RCLCPP_INFO(logger_, "Got parameters for node: %zu", result.names.size());
+      } catch (const std::exception& e) {
+        RCLCPP_ERROR(logger_, "Failed to get parameters: %s", e.what());
+        continue;
       }
+
+
+      // auto params = query_params_(node_name);
+      // if (params.has_value()) {
+      // it->second.params = *params;
+      // RCLCPP_DEBUG(logger_, "Node %s has parameters: %zu", node_name.c_str(), params->size());
+      // } else {
+      // RCLCPP_DEBUG(logger_, "Node %s is unresponsive to parameter queries", node_name.c_str());
+      // }
     } else {
       NodeTracking & tracking = it->second;
       tracking.stale = false;
@@ -689,6 +749,14 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
 void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
 {
   graph_change_callback_ = callback;
+}
+
+void RosGraphMonitor::start()
+{
+  // Start with an initial graph update
+  update_graph();
+  // Start the watch thread
+  watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
 }
 
 

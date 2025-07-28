@@ -39,6 +39,10 @@
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
+typedef std::shared_future<rcl_interfaces::msg::ListParametersResult> QueryParamsReturnType;
+typedef std::function<QueryParamsReturnType(
+      const std::string & node_name)> QueryParams;
+
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template<>
 struct std::hash<RosRmwGid>
@@ -115,8 +119,7 @@ public:
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    std::function<std::optional<std::vector<std::string>>(
-      const std::string & node_name)> query_params,
+    QueryParams query_params,
     GraphMonitorConfiguration config = GraphMonitorConfiguration{}
   );
 
@@ -147,6 +150,9 @@ public:
   /// @brief Set callback function to be called when graph changes
   /// @param callback Function to call when graph updates occur
   void set_graph_change_callback(std::function<void()> callback);
+
+  /// @brief Start monitoring the graph (call after Node is fully constructed)
+  void start();
 
 protected:
   /* Types */
@@ -203,6 +209,9 @@ protected:
   /// @return Whether to ignore tracking the node
   bool ignore_node(const std::string & node_name);
 
+  /// @brief TODO
+  void trigger_params_futures(QueryParamsReturnType params_future);
+
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
   void track_node_updates(
@@ -245,8 +254,7 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
-  std::function<std::optional<std::vector<std::string>>(const std::string & node_name)>
-  query_params_;
+  QueryParams query_params_;
 
   // Execution model
   std::atomic_bool shutdown_ = false;

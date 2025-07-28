@@ -46,7 +46,7 @@ protected:
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg);
   void publish_diagnostics();
   void publish_rosgraph();
-  std::optional<std::vector<std::string>> query_params(const std::string & node_name);
+  QueryParamsReturnType query_params(const std::string & node_name);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;

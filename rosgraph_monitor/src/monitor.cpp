@@ -127,10 +127,12 @@ rosgraph_monitor_msgs::msg::QosProfile to_msg(
   return qos_msg;
 }
 
-rosgraph_monitor_msgs::msg::Parameter RosGraphMonitor::ParamTracking::to_msg() const
+rcl_interfaces::msg::ParameterDescriptor RosGraphMonitor::ParameterTracking::to_msg() const
 {
-  rosgraph_monitor_msgs::msg::Parameter param_msg;
+  rcl_interfaces::msg::ParameterDescriptor param_msg;
   param_msg.name = name;
+  // TODO(troy): Actual type info will be populated in future PR
+  param_msg.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
   return param_msg;
 }
 
@@ -720,7 +722,7 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
         result.names.size());
       auto & tracking = nodes_[node_name_copy];
       for (const auto & param_name : result.names) {
-        tracking.params.push_back(ParamTracking{param_name});
+        tracking.params.push_back(ParameterTracking{param_name});
       }
       if (!tracking.params.empty()) {
         // Although the querying of node parameters doesn't necessarily

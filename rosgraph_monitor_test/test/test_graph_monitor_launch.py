@@ -21,9 +21,10 @@ from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
+from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_msgs.msg import Graph, Parameter, QosProfile as QosProfileMsg
+from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
 from rosgraph_monitor_test.test_utils import (
     create_random_node_name, find_node, wait_for_message_sync
 )
@@ -234,10 +235,10 @@ class TestProcessOutput(unittest.TestCase):
             # Assert on the parameters
             self.assertCountEqual(
                 list(filter(filter_params,  updated_node.parameters)), [
-                    Parameter(
+                    ParameterDescriptor(
                         name='param1',
                     ),
-                    Parameter(
+                    ParameterDescriptor(
                         name='param2',
                     ),
                 ],

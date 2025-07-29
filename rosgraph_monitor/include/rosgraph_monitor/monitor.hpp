@@ -34,6 +34,7 @@
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rcl_interfaces/msg/list_parameters_result.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
@@ -160,11 +161,12 @@ public:
 protected:
   /* Types */
 
-  struct ParamTracking
+  struct ParameterTracking
   {
     std::string name;
+    uint8_t type;
 
-    rosgraph_monitor_msgs::msg::Parameter to_msg() const;
+    rcl_interfaces::msg::ParameterDescriptor to_msg() const;
   };
 
 
@@ -174,7 +176,7 @@ protected:
     std::string name;
     bool missing = false;
     bool stale = false;
-    std::vector<ParamTracking> params;
+    std::vector<ParameterTracking> params;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time

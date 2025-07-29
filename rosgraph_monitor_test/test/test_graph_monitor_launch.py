@@ -227,18 +227,19 @@ class TestProcessOutput(unittest.TestCase):
             if not len(updated_node.parameters) > 0:
                 return False
 
+            def filter_params(param):
+                return param.name != 'use_sim_time' and \
+                       param.name != 'start_type_description_service'
+
             # Assert on the parameters
             self.assertCountEqual(
-                updated_node.parameters, [
+                list(filter(filter_params,  updated_node.parameters)), [
                     Parameter(
                         name='param1',
                     ),
                     Parameter(
                         name='param2',
                     ),
-                    Parameter(
-                        name='use_sim_time',
-                    )
                 ],
             )
             return True

@@ -722,8 +722,9 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
         result.names.size());
       auto & tracking = nodes_[node_name_copy];
       for (const auto & param_name : result.names) {
-        tracking.params.push_back(ParameterTracking{param_name,
-        rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
+        tracking.params.push_back(
+          ParameterTracking{param_name,
+            rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
       }
       if (!tracking.params.empty()) {
         // Although the querying of node parameters doesn't necessarily

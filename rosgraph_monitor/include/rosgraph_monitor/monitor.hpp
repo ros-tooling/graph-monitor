@@ -27,6 +27,7 @@
 #include <vector>
 #include <future>
 #include <functional>
+#include <atomic>
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"

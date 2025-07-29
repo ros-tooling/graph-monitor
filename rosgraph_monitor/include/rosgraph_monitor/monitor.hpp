@@ -39,6 +39,11 @@
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
+typedef std::shared_future<void> QueryParamsReturnType;
+typedef std::function<QueryParamsReturnType(
+      const std::string & node_name,
+      std::function<void (const rcl_interfaces::msg::ListParametersResult &)> callback)> QueryParams;
+
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template<>
 struct std::hash<RosRmwGid>
@@ -106,15 +111,18 @@ class RosGraphMonitor
 {
 public:
   /// @brief Constructor
-  /// @param config Includes/excludes the entities to care about in diagnostic reporting
-  /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param node_graph Interface from owning Node to retrieve information about the ROS graph
+  /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param logger
+  /// @param config Includes/excludes the entities to care about in diagnostic reporting
+  /// @param query_params Function to query parameters of a node by name
   RosGraphMonitor(
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
+    QueryParams query_params,
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{}
+  );
 
   virtual ~RosGraphMonitor();
 
@@ -142,16 +150,26 @@ public:
 
   /// @brief Set callback function to be called when graph changes
   /// @param callback Function to call when graph updates occur
-  void set_graph_change_callback(std::function<void()> callback);
+  void set_graph_change_callback(std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback);
 
 protected:
   /* Types */
 
+  struct ParamTracking
+  {
+    std::string name;
+
+    rosgraph_monitor_msgs::msg::Parameter to_msg() const;
+  };
+
+
   /// @brief Keeps flags for tracking observed nodes over time
   struct NodeTracking
   {
+    std::string name;
     bool missing = false;
     bool stale = false;
+    std::vector<ParamTracking> params;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time
@@ -233,6 +251,10 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
+  /// @brief Query parameters for a newly discovered node
+  /// @param node_name The name of the node to query parameters for
+  void query_node_parameters(const std::string & node_name);
+
   /* Members */
 
   // Configuration
@@ -240,6 +262,7 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
+  QueryParams query_params_;
 
   // Execution model
   std::atomic_bool shutdown_ = false;
@@ -261,6 +284,7 @@ protected:
   std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
   std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
   std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
+  std::unordered_map<std::string, std::shared_future<void>> params_futures;
 };
 
 }  // namespace rosgraph_monitor

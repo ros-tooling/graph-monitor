@@ -3,3 +3,5 @@ string name
 
 Topic[] publishers
 Topic[] subscriptions
+
+Parameter[] parameters

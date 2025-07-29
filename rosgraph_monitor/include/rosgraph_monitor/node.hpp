@@ -17,6 +17,8 @@
 
 #include <memory>
 #include <vector>
+#include <string>
+#include <unordered_map>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
@@ -43,7 +45,10 @@ protected:
   void update_params(const rosgraph_monitor::Params & params);
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg);
   void publish_diagnostics();
-  void publish_rosgraph();
+  void publish_rosgraph(rosgraph_monitor_msgs::msg::Graph rosgraph_msg);
+  QueryParamsReturnType query_params(
+    const std::string & node_name,
+    std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;
@@ -55,6 +60,8 @@ protected:
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
   rclcpp::Publisher<rosgraph_monitor_msgs::msg::Graph>::SharedPtr pub_rosgraph_;
   rclcpp::TimerBase::SharedPtr timer_publish_report_;
+
+  std::unordered_map<std::string, rclcpp::AsyncParametersClient> param_clients_;
 };
 
 }  // namespace rosgraph_monitor

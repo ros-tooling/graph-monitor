@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <string>
 
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
@@ -67,6 +68,8 @@ Node::Node(const rclcpp::NodeOptions & options)
     get_node_graph_interface(),
     [this]() {return get_clock()->now();},
     get_logger().get_child("rosgraph"),
+    std::bind(
+      &Node::query_params, this, std::placeholders::_1, std::placeholders::_2),
     create_graph_monitor_config(params_)),
   sub_topic_statistics_(
     create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
@@ -90,10 +93,10 @@ Node::Node(const rclcpp::NodeOptions & options)
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
 
   // Set up callback to publish rosgraph when nodes change
-  graph_monitor_.set_graph_change_callback(std::bind(&Node::publish_rosgraph, this));
-
-  // Publish initial rosgraph state
-  publish_rosgraph();
+  graph_monitor_.set_graph_change_callback(
+    std::bind(
+      &Node::publish_rosgraph, this,
+      std::placeholders::_1));
 }
 
 void Node::update_params(const rosgraph_monitor::Params & params)
@@ -101,6 +104,45 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   params_ = params;
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
+
+// TODO(troy): Perhaps we should have some retry logic here?
+std::shared_future<void> Node::query_params(
+  const std::string & node_name,
+  std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)
+{
+  auto param_client = std::make_shared<rclcpp::AsyncParametersClient>(
+    this->get_node_base_interface(),
+    this->get_node_topics_interface(),
+    this->get_node_graph_interface(),
+    this->get_node_services_interface(),
+    node_name
+  );
+
+  return std::async(
+    std::launch::async,
+    [param_client, node_name, callback]() -> void {
+      if (!param_client->wait_for_service(std::chrono::seconds(5))) {
+        RCLCPP_WARN(
+          rclcpp::get_logger("rosgraph_monitor"),
+          "Parameter service for node %s not available, skipping query",
+          node_name.c_str());
+        return;
+      }
+
+      auto list_parameters = param_client->list_parameters({}, 0);
+
+      if (list_parameters.wait_for(std::chrono::seconds(5)) !=
+      std::future_status::ready)
+      {
+        RCLCPP_WARN(
+          rclcpp::get_logger("rosgraph_monitor"),
+          "Parameter query for node %s timed out", node_name.c_str());
+        return;
+      }
+      callback(list_parameters.get());
+    });
+}
+
 
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)
 {
@@ -118,10 +160,8 @@ void Node::publish_diagnostics()
   pub_diagnostics_->publish(std::move(diagnostic_array));
 }
 
-void Node::publish_rosgraph()
+void Node::publish_rosgraph(rosgraph_monitor_msgs::msg::Graph rosgraph_msg)
 {
-  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
-  graph_monitor_.fill_rosgraph_msg(rosgraph_msg);
   pub_rosgraph_->publish(std::move(rosgraph_msg));
 }
 

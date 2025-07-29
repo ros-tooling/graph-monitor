@@ -224,8 +224,8 @@ void RosGraphMonitor::track_node_updates(
       continue;
     }
 
-     NodeTracking tracking{};
-     tracking.name = node_name;
+    NodeTracking tracking{};
+    tracking.name = node_name;
 
     auto [it, inserted] = nodes_.emplace(
       node_name, tracking);

@@ -74,12 +74,16 @@ def wait_for_message_sync(node, message_type, topic, condition_func, timeout_sec
         1  # QoS depth
     )
 
+    # Create separate executor for this operation to avoid race condition
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+
     start_time = time.time()
     end_time = start_time + timeout_sec
 
     try:
         while time.time() < end_time:
-            rclpy.spin_once(node, timeout_sec=0.1)
+            executor.spin_once(timeout_sec=0.1)
 
             # Check if any message meets the condition
             if messages and condition_func(messages[-1]):
@@ -89,4 +93,5 @@ def wait_for_message_sync(node, message_type, topic, condition_func, timeout_sec
         return False, messages
 
     finally:
+        executor.remove_node(node)
         node.destroy_subscription(subscriber)

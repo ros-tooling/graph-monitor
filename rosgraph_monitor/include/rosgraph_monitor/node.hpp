@@ -33,6 +33,8 @@
 namespace rosgraph_monitor
 {
 
+constexpr int SERVICE_TIMEOUT_S = 5;
+
 class Node : public rclcpp::Node
 {
 private:

@@ -121,25 +121,33 @@ std::shared_future<void> Node::query_params(
   return std::async(
     std::launch::async,
     [param_client, node_name, callback]() -> void {
-      if (!param_client->wait_for_service(std::chrono::seconds(5))) {
-        RCLCPP_WARN(
-          rclcpp::get_logger("rosgraph_monitor"),
-          "Parameter service for node %s not available, skipping query",
-          node_name.c_str());
-        return;
-      }
+      bool params_received = false;
+      while (!params_received && rclcpp::ok()) {
+        if (!param_client->wait_for_service(std::chrono::seconds(SERVICE_TIMEOUT_S))) {
+          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter service for node %s not available, retrying in %d seconds",
+            node_name.c_str(), SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
 
-      auto list_parameters = param_client->list_parameters({}, 0);
+        auto list_parameters = param_client->list_parameters({}, 0);
 
-      if (list_parameters.wait_for(std::chrono::seconds(5)) !=
-      std::future_status::ready)
-      {
-        RCLCPP_WARN(
-          rclcpp::get_logger("rosgraph_monitor"),
-          "Parameter query for node %s timed out", node_name.c_str());
-        return;
+        if (list_parameters.wait_for(std::chrono::seconds(SERVICE_TIMEOUT_S)) !=
+        std::future_status::ready)
+        {
+          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter query for node %s timed out, retrying in %d seconds", node_name.c_str(),
+            SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
+
+        params_received = true;
+        callback(list_parameters.get());
       }
-      callback(list_parameters.get());
     });
 }
 

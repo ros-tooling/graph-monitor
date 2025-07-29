@@ -221,7 +221,6 @@ class TestProcessOutput(unittest.TestCase):
         def parameters_condition(msg):
             # Find the parameter node
             updated_node = find_node(msg, node_name)
-            print(f'Found node: {updated_node.name if updated_node else "None"}')
             if not updated_node:
                 return False
 

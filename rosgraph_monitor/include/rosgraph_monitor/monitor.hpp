@@ -262,7 +262,6 @@ protected:
   std::function<rclcpp::Time()> now_fn_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::Logger logger_;
-  QueryParams query_params_;
 
   // Execution model
   std::atomic_bool shutdown_ = false;
@@ -270,6 +269,8 @@ protected:
   std::thread watch_thread_;
   Event update_event_;
   std::function<void()> graph_change_callback_;
+
+  QueryParams query_params_;
 
   // Graph cache
   std::unordered_map<std::string, NodeTracking> nodes_;

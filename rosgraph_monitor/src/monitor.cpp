@@ -721,6 +721,8 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
         logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(),
         result.names.size());
       auto & tracking = nodes_[node_name_copy];
+      tracking.params.clear();
+      tracking.params.reserve(result.names.size());
       for (const auto & param_name : result.names) {
         tracking.params.push_back(
           ParameterTracking{param_name,

@@ -105,7 +105,6 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
-// TODO(troy): Perhaps we should have some retry logic here?
 std::shared_future<void> Node::query_params(
   const std::string & node_name,
   std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)

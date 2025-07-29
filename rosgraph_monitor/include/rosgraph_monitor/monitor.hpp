@@ -42,7 +42,8 @@ typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 typedef std::shared_future<void> QueryParamsReturnType;
 typedef std::function<QueryParamsReturnType(
       const std::string & node_name,
-      std::function<void (const rcl_interfaces::msg::ListParametersResult &)> callback)> QueryParams;
+      std::function<void (const rcl_interfaces::msg::ListParametersResult &)>
+      callback)> QueryParams;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template<>

@@ -15,6 +15,8 @@
 #ifndef ROSGRAPH_MONITOR__MONITOR_HPP_
 #define ROSGRAPH_MONITOR__MONITOR_HPP_
 
+#include <future>
+#include <functional>
 #include <thread>
 #include <map>
 #include <memory>
@@ -25,9 +27,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <future>
-#include <functional>
-#include <atomic>
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"
@@ -175,6 +174,8 @@ protected:
     bool stale = false;
     std::vector<rcl_interfaces::msg::ParameterValue> param_values;
     std::vector<rcl_interfaces::msg::ParameterDescriptor> param_descriptors;
+
+    explicit NodeTracking(const std::string & name);
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time

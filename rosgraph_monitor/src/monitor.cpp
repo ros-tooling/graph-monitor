@@ -22,7 +22,6 @@
 #include <memory>
 
 #include "rclcpp/logging.hpp"
-#include "rclcpp/parameter_client.hpp"
 
 
 std::size_t std::hash<RosRmwGid>::operator()(
@@ -128,6 +127,10 @@ rosgraph_monitor_msgs::msg::QosProfile to_msg(
 }
 
 
+
+RosGraphMonitor::NodeTracking::NodeTracking(const std::string & name)
+: name(name) {}
+
 RosGraphMonitor::EndpointTracking::EndpointTracking(
   const std::string & topic_name,
   const rclcpp::TopicEndpointInfo & info,
@@ -217,9 +220,7 @@ void RosGraphMonitor::track_node_updates(
       continue;
     }
 
-    NodeTracking tracking{};
-    tracking.name = node_name;
-
+    NodeTracking tracking{node_name};
     auto [it, inserted] = nodes_.emplace(
       node_name, tracking);
 
@@ -729,10 +730,6 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
         tracking.param_descriptors[i] = describe_parameters[i];
       }
       if (!tracking.param_values.empty()) {
-        // Although the querying of node parameters doesn't necessarily
-        // qualify as a graph change in of itself, our **knowledge** of the
-        // graph has changed and therefore qualifies as a graph change
-        // event.
         graph_change_callback_();
       }
     });

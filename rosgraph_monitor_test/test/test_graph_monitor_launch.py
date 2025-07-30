@@ -21,7 +21,7 @@ from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
-from rcl_interfaces.msg import ParameterDescriptor
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 import rclpy
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
@@ -83,8 +83,8 @@ class TestProcessOutput(unittest.TestCase):
 
         new_node = rclpy.create_node(node_name)
         if parameters is not None:
-            for param_name, param_value in parameters.items():
-                new_node.declare_parameter(param_name, param_value)
+            for param_name, param in parameters.items():
+                new_node.declare_parameter(param_name, param[0], param[1])
         self.executor.add_node(new_node)
         return new_node, node_name
 
@@ -212,9 +212,21 @@ class TestProcessOutput(unittest.TestCase):
         self.cleanup_node(new_node)
 
     def test_adding_node_with_parameters(self):
+        descriptors = [
+            ParameterDescriptor(
+                name='param1',
+                type=ParameterType.PARAMETER_STRING,
+                description='A test string parameter'
+            ),
+            ParameterDescriptor(
+                name='param2',
+                type=ParameterType.PARAMETER_INTEGER,
+                description='A test integer parameter'
+            )
+        ]
         params = {
-            'param1': 'value1',
-            'param2': 42
+            'param1': tuple(('value1', descriptors[0])),
+            'param2': tuple((42, descriptors[1])),
         }
         _, node_name = self.add_node(parameters=params)
 
@@ -234,15 +246,9 @@ class TestProcessOutput(unittest.TestCase):
 
             # Assert on the parameters
             self.assertCountEqual(
-                list(filter(filter_params,  updated_node.parameters)), [
-                    ParameterDescriptor(
-                        name='param1',
-                    ),
-                    ParameterDescriptor(
-                        name='param2',
-                    ),
-                ],
+                list(filter(filter_params,  updated_node.parameters)), descriptors,
             )
+
             return True
 
         success, messages = wait_for_message_sync(

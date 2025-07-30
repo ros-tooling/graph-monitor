@@ -155,11 +155,17 @@ static rclcpp::TopicEndpointInfo blank_info()
   return rclcpp::TopicEndpointInfo{cinfo};
 }
 
+struct MockedParams {
+  rcl_interfaces::msg::ListParametersResult params;
+  std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
+  std::vector<rcl_interfaces::msg::ParameterValue> values;
+};
+
 struct MockedNode
 {
   std::string name;
-  std::vector<std::string> params;
-  explicit MockedNode(const std::string & name, const std::vector<std::string> & params = {})
+  MockedParams params;
+  explicit MockedNode(const std::string & name, const MockedParams & params = {})
   : name(name), params(params) {}
 };
 
@@ -277,22 +283,18 @@ protected:
     graphmon_.emplace(
       node_graph_,
       [this]() {return now_;}, logger, [this](const std::string & node_name,
-      std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
+      QueryParamsCallback callback) {
         return std::async(
           std::launch::async, [this, node_name, callback]() {
-            std::vector<std::string> param_names;
             for (const auto & node : mocked_nodes_) {
               if (node.name == node_name) {
-                for (const auto & param : node.params) {
-                  param_names.push_back(param);
-                }
+                  callback(node.params.params, node.params.values, node.params.descriptors);
+                  return;
               }
             }
 
-            rcl_interfaces::msg::ListParametersResult result{};
-            result.names = param_names;
-            callback(result);
-          });
+            throw std::runtime_error("Node not found: " + node_name);
+         });
       });
 
     graphmon_->set_graph_change_callback(
@@ -865,9 +867,31 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
 }
 
 TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
-  // Set up some nodes, including one that should be warn-only
+  rcl_interfaces::msg::ListParametersResult param_list;
+  param_list.names = {"param1", "param2"};
+
+  rcl_interfaces::msg::ParameterDescriptor param1_desc;
+  param1_desc.name = "param1";
+  param1_desc.description = "Parameter 1";
+  param1_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+
+  rcl_interfaces::msg::ParameterDescriptor param2_desc;
+  param2_desc.name = "param2";
+  param2_desc.description = "Parameter 2";
+  param2_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+
+  rcl_interfaces::msg::ParameterValue param1_value;
+  param1_value.integer_value = 42;
+  rcl_interfaces::msg::ParameterValue param2_value;
+  param2_value.string_value = "Hello, World!";
+
+  MockedParams mocked_params{};
+  mocked_params.params = param_list;
+  mocked_params.descriptors = {param1_desc, param2_desc};
+  mocked_params.values = {param1_value, param2_value};
+
   std::vector<MockedNode> mocked_nodes{
-    MockedNode("/node1", {"param1", "param2"}),
+    MockedNode("/node1", mocked_params),
   };
 
   set_nodes(mocked_nodes);
@@ -888,10 +912,25 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
   auto node = rosgraph_msg.nodes.front();
   EXPECT_EQ(node.name, "/node1");
   EXPECT_EQ(node.parameters.size(), 2);
+  EXPECT_EQ(node.parameter_values.size(), 2);
+
 
   std::vector<std::string> param_names{};
   for (const auto & param : node.parameters) {
     param_names.push_back(param.name);
   }
+
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
+
+  // Expect parameter values to match
+  EXPECT_EQ(node.parameter_values[0].integer_value, 42);
+  EXPECT_EQ(node.parameter_values[1].string_value, "Hello, World!");
+
+  // Expect parameter descriptors to match
+  EXPECT_EQ(node.parameters[0].name, "param1");
+  EXPECT_EQ(node.parameters[0].description, "Parameter 1");
+  EXPECT_EQ(node.parameters[0].type, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
+  EXPECT_EQ(node.parameters[1].name, "param2");
+  EXPECT_EQ(node.parameters[1].description, "Parameter 2");
+  EXPECT_EQ(node.parameters[1].type, rcl_interfaces::msg::ParameterType::PARAMETER_STRING);
 }

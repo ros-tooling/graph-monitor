@@ -44,11 +44,16 @@
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
+typedef std::function<void (const rcl_interfaces::msg::ListParametersResult &,
+      const std::vector<rcl_interfaces::msg::ParameterValue> &, const
+      std::vector<rcl_interfaces::msg::ParameterDescriptor> &)>
+      QueryParamsCallback;
+
+
 typedef std::shared_future<void> QueryParamsReturnType;
 typedef std::function<QueryParamsReturnType(
       const std::string & node_name,
-      std::function<void (const rcl_interfaces::msg::ListParametersResult &)>
-      callback)> QueryParams;
+      QueryParamsCallback callback)> QueryParams;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template<>
@@ -161,14 +166,6 @@ public:
 protected:
   /* Types */
 
-  struct ParameterTracking
-  {
-    std::string name;
-    uint8_t type;
-
-    rcl_interfaces::msg::ParameterDescriptor to_msg() const;
-  };
-
 
   /// @brief Keeps flags for tracking observed nodes over time
   struct NodeTracking
@@ -176,7 +173,8 @@ protected:
     std::string name;
     bool missing = false;
     bool stale = false;
-    std::vector<ParameterTracking> params;
+    std::vector<rcl_interfaces::msg::ParameterValue> param_values;
+    std::vector<rcl_interfaces::msg::ParameterDescriptor> param_descriptors;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time

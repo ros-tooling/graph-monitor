@@ -127,14 +127,6 @@ rosgraph_monitor_msgs::msg::QosProfile to_msg(
   return qos_msg;
 }
 
-rcl_interfaces::msg::ParameterDescriptor RosGraphMonitor::ParameterTracking::to_msg() const
-{
-  rcl_interfaces::msg::ParameterDescriptor param_msg;
-  param_msg.name = name;
-  // TODO(troy): Actual type info will be populated in future PR
-  param_msg.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
-  return param_msg;
-}
 
 RosGraphMonitor::EndpointTracking::EndpointTracking(
   const std::string & topic_name,
@@ -185,7 +177,6 @@ RosGraphMonitor::~RosGraphMonitor()
   update_event_.set();
 
   params_futures.clear();
-
   watch_thread_.join();
 }
 
@@ -677,8 +668,12 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
     rosgraph_monitor_msgs::msg::NodeInfo node_msg;
     node_msg.name = node_name;
 
-    for (const auto & param : node_info.params) {
-      node_msg.parameters.push_back(param.to_msg());
+    for (const auto & param : node_info.param_values) {
+      node_msg.parameter_values.push_back(param);
+    }
+
+    for (const auto & descriptor : node_info.param_descriptors) {
+      node_msg.parameters.push_back(descriptor);
     }
 
     // Add publishers for this node
@@ -716,19 +711,25 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
   params_futures[node_name] = query_params_(
     node_name,
     [this, node_name_copy = std::string(node_name)](
-      const rcl_interfaces::msg::ListParametersResult & result) {
+      const rcl_interfaces::msg::ListParametersResult & listed_params,
+      const std::vector<rcl_interfaces::msg::ParameterValue> & parameter_values,
+      const std::vector<rcl_interfaces::msg::ParameterDescriptor> & describe_parameters
+    ) {
       RCLCPP_INFO(
         logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(),
-        result.names.size());
+        listed_params.names.size());
       auto & tracking = nodes_[node_name_copy];
-      tracking.params.clear();
-      tracking.params.reserve(result.names.size());
-      for (const auto & param_name : result.names) {
-        tracking.params.push_back(
-          ParameterTracking{param_name,
-            rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
+      tracking.param_values.clear();
+      tracking.param_descriptors.clear();
+      tracking.param_values.resize(listed_params.names.size());
+      tracking.param_descriptors.resize(listed_params.names.size());
+
+      for (size_t i = 0; i < listed_params.names.size(); ++i) {
+        const auto & param_name = listed_params.names[i];
+        tracking.param_values[i] = parameter_values[i];
+        tracking.param_descriptors[i] = describe_parameters[i];
       }
-      if (!tracking.params.empty()) {
+      if (!tracking.param_values.empty()) {
         // Although the querying of node parameters doesn't necessarily
         // qualify as a graph change in of itself, our **knowledge** of the
         // graph has changed and therefore qualifies as a graph change

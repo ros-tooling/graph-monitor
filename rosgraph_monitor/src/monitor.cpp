@@ -725,7 +725,6 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
       tracking.param_descriptors.resize(listed_params.names.size());
 
       for (size_t i = 0; i < listed_params.names.size(); ++i) {
-        const auto & param_name = listed_params.names[i];
         tracking.param_values[i] = parameter_values[i];
         tracking.param_descriptors[i] = describe_parameters[i];
       }

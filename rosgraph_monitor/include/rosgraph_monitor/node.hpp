@@ -51,7 +51,7 @@ protected:
   void publish_rosgraph(rosgraph_monitor_msgs::msg::Graph rosgraph_msg);
   QueryParamsReturnType query_params(
     const std::string & node_name,
-    std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
+    QueryParamsCallback callback);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;

@@ -26,6 +26,7 @@
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
+#include "rcl_interfaces/msg/parameter.hpp"
 
 namespace
 {
@@ -107,7 +108,7 @@ void Node::update_params(const rosgraph_monitor::Params & params)
 
 std::shared_future<void> Node::query_params(
   const std::string & node_name,
-  std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)
+  QueryParamsCallback callback)
 {
   auto param_client = std::make_shared<rclcpp::AsyncParametersClient>(
     this->get_node_base_interface(),
@@ -144,8 +145,48 @@ std::shared_future<void> Node::query_params(
           continue;
         }
 
+        const auto & list_parameters_result = list_parameters.get();
+
+        auto parameter_values_future = param_client->get_parameters(
+          list_parameters_result.names);
+
+        if (parameter_values_future.wait_for(std::chrono::seconds(SERVICE_TIMEOUT_S)) !=
+        std::future_status::ready)
+        {          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter values query for node %s timed out, retrying in %d seconds",
+            node_name.c_str(), SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
+
+        auto describe_parameters_future =
+          param_client->describe_parameters(list_parameters_result.names);
+
+        if (describe_parameters_future.wait_for(std::chrono::seconds(SERVICE_TIMEOUT_S)) !=
+        std::future_status::ready)
+        {          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter describe query for node %s timed out, retrying in %d seconds",
+            node_name.c_str(), SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
+
+        const auto & parameters = parameter_values_future.get();
+        const auto & describe_parameters = describe_parameters_future.get();
+
+        // Convert parameters to parameter values
+        std::vector<rcl_interfaces::msg::ParameterValue> parameter_values;
+        parameter_values.reserve(parameters.size());
+        for (const auto & param : parameters) {
+          parameter_values.push_back(param.get_value_message());
+        }
+
         params_received = true;
-        callback(list_parameters.get());
+        callback(list_parameters_result,
+                 parameter_values,
+                 describe_parameters);
       }
     });
 }

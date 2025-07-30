@@ -721,7 +721,12 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
       RCLCPP_INFO(
         logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(),
         result.names.size());
-      auto & tracking = nodes_[node_name_copy];
+      auto it = nodes_.find(node_name_copy);
+      if (it == nodes_.end()) {
+        RCLCPP_WARN(logger_, "Node %s not found in tracking map", node_name_copy.c_str());
+        return;
+      }
+      auto & tracking = it->second;
       tracking.params.clear();
       tracking.params.reserve(result.names.size());
       for (const auto & param_name : result.names) {

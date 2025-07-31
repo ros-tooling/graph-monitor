@@ -21,6 +21,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gmock/gmock.h"
@@ -154,6 +155,14 @@ static rclcpp::TopicEndpointInfo blank_info()
   return rclcpp::TopicEndpointInfo{cinfo};
 }
 
+struct MockedNode
+{
+  std::string name;
+  std::vector<std::string> params;
+  explicit MockedNode(const std::string & name, const std::vector<std::string> & params = {})
+  : name(name), params(params) {}
+};
+
 struct Endpoint
 {
   std::string topic_name;
@@ -194,7 +203,11 @@ protected:
     EXPECT_CALL(*node_graph_, get_node_names)
     .WillRepeatedly(
       [this]() {
-        return node_names_;
+        std::vector<std::string> node_names;
+        for (const auto & node : mocked_nodes_) {
+          node_names.push_back(node.name);
+        }
+        return node_names;
       });
     EXPECT_CALL(*node_graph_, get_topic_names_and_types_mock_)
     .WillRepeatedly(
@@ -259,7 +272,35 @@ protected:
       });
 
     auto logger = logger_.get_child("graphmon");
-    graphmon_.emplace(node_graph_, [this]() {return now_;}, logger);
+
+
+    graphmon_.emplace(
+      node_graph_,
+      [this]() {return now_;}, logger, [this](const std::string & node_name,
+      std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
+        return std::async(
+          std::launch::async, [this, node_name, callback]() {
+            std::vector<std::string> param_names;
+            for (const auto & node : mocked_nodes_) {
+              if (node.name == node_name) {
+                for (const auto & param : node.params) {
+                  param_names.push_back(param);
+                }
+              }
+            }
+
+            rcl_interfaces::msg::ListParametersResult result{};
+            result.names = param_names;
+            callback(result);
+          });
+      });
+
+    graphmon_->set_graph_change_callback(
+      [this](rosgraph_monitor_msgs::msg::Graph & msg) {
+        std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
+        queue_.push_back(msg);
+        graphmon_msg_cv_.notify_one();
+      });
   }
 
   void trigger_and_wait()
@@ -268,13 +309,60 @@ protected:
     ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(10)));
   }
 
+  rosgraph_monitor_msgs::msg::Graph await_graphmon_msg()
+  {
+    std::unique_lock<std::mutex> lock(graphmon_msg_mutex_);
+    graphmon_msg_cv_.wait_for(
+      lock, std::chrono::milliseconds(100), [this]() {
+        return !queue_.empty();
+      });
+    rosgraph_monitor_msgs::msg::Graph msg = queue_.front();
+    queue_.pop_front();
+    return msg;
+  }
+
+  template<typename Predicate>
+  rosgraph_monitor_msgs::msg::Graph await_graphmon_msg_until(
+    Predicate condition,
+    std::chrono::milliseconds timeout = std::chrono::milliseconds(1000),
+    const std::string & timeout_message = "Timed out waiting for condition")
+  {
+    auto start_time = std::chrono::steady_clock::now();
+    rosgraph_monitor_msgs::msg::Graph msg;
+
+    while (true) {
+      msg = await_graphmon_msg();
+
+      if (condition(msg)) {
+        return msg;
+      }
+
+      auto elapsed = std::chrono::steady_clock::now() - start_time;
+      if (elapsed > timeout) {
+        ADD_FAILURE() << timeout_message;
+        return msg;
+      }
+    }
+  }
+
+
   void set_node_names(std::vector<std::string> node_names)
   {
-    // Add the root namespace / onto the names, which should not be specified with it
-    node_names_.clear();
-    node_names_.reserve(node_names.size());
+    std::vector<MockedNode> nodes;
+    nodes.reserve(node_names.size());
     for (const auto & name : node_names) {
-      node_names_.push_back("/" + name);
+      nodes.emplace_back("/" + name);
+    }
+    set_nodes(nodes);
+  }
+
+  void set_nodes(std::vector<MockedNode> nodes)
+  {
+    // Add the root namespace / onto the names, which should not be specified with it
+    mocked_nodes_.clear();
+    mocked_nodes_.reserve(nodes.size());
+    for (const auto & node : nodes) {
+      mocked_nodes_.push_back(node);
     }
     trigger_and_wait();
   }
@@ -382,10 +470,16 @@ protected:
   std::shared_ptr<MockGraph> node_graph_;
   std::optional<rosgraph_monitor::RosGraphMonitor> graphmon_;
 
+  // Graph message handling
+  std::mutex graphmon_msg_mutex_;
+  std::condition_variable graphmon_msg_cv_;
+  std::deque<rosgraph_monitor_msgs::msg::Graph> queue_;
+
+
   const std::string default_node_name_ = "testy0";
   const std::string default_topic_name_ = "/topic1";
   const rclcpp::QoS default_qos_{10};
-  std::vector<std::string> node_names_;
+  std::vector<MockedNode> mocked_nodes_;
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
@@ -725,11 +819,8 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
 TEST_F(GraphMonitorTest, rosgraph_generation) {
   // Set up test nodes
   set_node_names({"node1", "node2", "node3"});
-  trigger_and_wait();
-
   // Generate rosgraph message
-  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
-  graphmon_->fill_rosgraph_msg(rosgraph_msg);
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg = await_graphmon_msg();
 
   // Verify the message contains expected nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 3);
@@ -752,11 +843,14 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
   // Set up some nodes, including one that should be ignored
   graphmon_->config().nodes.ignore_prefixes = {"/dummy"};
   set_node_names({"node1", "node2", "dummy/ignored_node"});
-  trigger_and_wait();
 
-  // Generate rosgraph message
-  rosgraph_monitor_msgs::msg::Graph rosgraph_msg;
-  graphmon_->fill_rosgraph_msg(rosgraph_msg);
+  rosgraph_monitor_msgs::msg::Graph rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 2;  // We expect only 2 nodes after ignoring
+    },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for ignored nodes to be filtered"
+  );
 
   // Verify the message contains only non-ignored nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 2);
@@ -768,4 +862,36 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
   }
 
   EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2"));
+}
+
+TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
+  // Set up some nodes, including one that should be warn-only
+  std::vector<MockedNode> mocked_nodes{
+    MockedNode("/node1", {"param1", "param2"}),
+  };
+
+  set_nodes(mocked_nodes);
+  node_graph_->notify_graph_change();
+
+  // Wait for the graph message with parameters populated
+  // The parameter query is async, so we need to wait for it to complete
+  auto rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
+    },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for parameters to be populated"
+  );
+
+  // Verify the message contains the expected node and parameters
+  EXPECT_EQ(rosgraph_msg.nodes.size(), 1);
+  auto node = rosgraph_msg.nodes.front();
+  EXPECT_EQ(node.name, "/node1");
+  EXPECT_EQ(node.parameters.size(), 2);
+
+  std::vector<std::string> param_names{};
+  for (const auto & param : node.parameters) {
+    param_names.push_back(param.name);
+  }
+  EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
 }

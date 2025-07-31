@@ -16,6 +16,7 @@
 #define ROSGRAPH_MONITOR__NODE_HPP_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
@@ -30,6 +31,8 @@
 namespace rosgraph_monitor
 {
 
+constexpr int SERVICE_TIMEOUT_S = 5;
+
 class Node : public rclcpp::Node
 {
 private:
@@ -43,7 +46,10 @@ protected:
   void update_params(const rosgraph_monitor::Params & params);
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg);
   void publish_diagnostics();
-  void publish_rosgraph();
+  void publish_rosgraph(rosgraph_monitor_msgs::msg::Graph rosgraph_msg);
+  QueryParamsReturnType query_params(
+    const std::string & node_name,
+    std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;

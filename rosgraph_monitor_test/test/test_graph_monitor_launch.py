@@ -21,6 +21,7 @@ from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
+from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
@@ -65,7 +66,7 @@ class TestProcessOutput(unittest.TestCase):
         cls.executor.shutdown()
         cls.subscriber_node.destroy_node()
 
-    def add_node(self, node_name=None):
+    def add_node(self, node_name=None, parameters=None):
         """
         Create and add a new ROS node to the executor.
 
@@ -81,6 +82,9 @@ class TestProcessOutput(unittest.TestCase):
             node_name = create_random_node_name()
 
         new_node = rclpy.create_node(node_name)
+        if parameters is not None:
+            for param_name, param_value in parameters.items():
+                new_node.declare_parameter(param_name, param_value)
         self.executor.add_node(new_node)
         return new_node, node_name
 
@@ -206,6 +210,54 @@ class TestProcessOutput(unittest.TestCase):
 
         # Remove the node and check diagnostics again
         self.cleanup_node(new_node)
+
+    def test_adding_node_with_parameters(self):
+        params = {
+            'param1': 'value1',
+            'param2': 42
+        }
+        _, node_name = self.add_node(parameters=params)
+
+        # Wait for the graph to update with the new parameters
+        def parameters_condition(msg):
+            # Find the parameter node
+            updated_node = find_node(msg, node_name)
+            if not updated_node:
+                return False
+
+            if not len(updated_node.parameters) > 0:
+                return False
+
+            def filter_params(param):
+                return param.name != 'use_sim_time' and \
+                       param.name != 'start_type_description_service'
+
+            # Assert on the parameters
+            self.assertCountEqual(
+                list(filter(filter_params,  updated_node.parameters)), [
+                    ParameterDescriptor(
+                        name='param1',
+                    ),
+                    ParameterDescriptor(
+                        name='param2',
+                    ),
+                ],
+            )
+            return True
+
+        success, messages = wait_for_message_sync(
+            self.subscriber_node,
+            Graph,
+            '/rosgraph',
+            parameters_condition,
+            timeout_sec=5.0
+        )
+
+        self.assertTrue(
+            success,
+            f'Should have received diagnostics for {node_name}. '
+            f'Received {len(messages)} messages.'
+        )
 
     def test_adding_publisher(self):
         new_node, node_name = self.add_node()

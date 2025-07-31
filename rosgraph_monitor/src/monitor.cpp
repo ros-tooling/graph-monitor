@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #include "rclcpp/logging.hpp"
 
@@ -125,6 +126,19 @@ rosgraph_monitor_msgs::msg::QosProfile to_msg(
   return qos_msg;
 }
 
+rcl_interfaces::msg::ParameterDescriptor RosGraphMonitor::ParameterTracking::to_msg() const
+{
+  rcl_interfaces::msg::ParameterDescriptor param_msg;
+  param_msg.name = name;
+  // TODO(troy): Actual type info will be populated in future PR
+  param_msg.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
+  return param_msg;
+}
+
+
+RosGraphMonitor::NodeTracking::NodeTracking(const std::string & name)
+: name(name) {}
+
 RosGraphMonitor::EndpointTracking::EndpointTracking(
   const std::string & topic_name,
   const rclcpp::TopicEndpointInfo & info,
@@ -151,12 +165,15 @@ RosGraphMonitor::RosGraphMonitor(
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
   std::function<rclcpp::Time()> now_fn,
   rclcpp::Logger logger,
-  GraphMonitorConfiguration config)
+  QueryParams query_params,
+  GraphMonitorConfiguration config
+)
 : config_(config),
   now_fn_(now_fn),
   node_graph_(node_graph),
   logger_(logger),
-  graph_change_event_(node_graph->get_graph_event())
+  graph_change_event_(node_graph->get_graph_event()),
+  query_params_(query_params)
 {
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
@@ -169,6 +186,9 @@ RosGraphMonitor::~RosGraphMonitor()
   graph_change_event_->set();
   node_graph_->notify_shutdown();
   update_event_.set();
+
+  params_futures.clear();
+
   watch_thread_.join();
 }
 
@@ -209,9 +229,13 @@ void RosGraphMonitor::track_node_updates(
       continue;
     }
 
-    auto [it, inserted] = nodes_.emplace(node_name, NodeTracking{});
+    NodeTracking tracking{node_name};
+    auto [it, inserted] = nodes_.emplace(
+      node_name, tracking);
+
     if (inserted) {
       RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
+      query_node_parameters(node_name);
     } else {
       NodeTracking & tracking = it->second;
       tracking.stale = false;
@@ -219,6 +243,7 @@ void RosGraphMonitor::track_node_updates(
         RCLCPP_INFO(logger_, "Node %s came back", node_name.c_str());
         tracking.missing = false;
         returned_nodes_.insert(node_name);
+        query_node_parameters(node_name);
       }
     }
   }
@@ -653,6 +678,10 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
     rosgraph_monitor_msgs::msg::NodeInfo node_msg;
     node_msg.name = node_name;
 
+    for (const auto & param : node_info.params) {
+      node_msg.parameters.push_back(param.to_msg());
+    }
+
     // Add publishers for this node
     for (auto & [gid, tracking] : publishers_) {
       if (tracking.node_name == node_name) {
@@ -668,14 +697,47 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
         node_msg.subscriptions.push_back(topic_msg);
       }
     }
-
     msg.nodes.push_back(node_msg);
   }
 }
 
-void RosGraphMonitor::set_graph_change_callback(std::function<void()> callback)
+void RosGraphMonitor::set_graph_change_callback(
+  std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback)
 {
-  graph_change_callback_ = callback;
+  graph_change_callback_ = [callback, this]() {
+      rosgraph_monitor_msgs::msg::Graph msg;
+      fill_rosgraph_msg(msg);
+      callback(msg);
+    };
+}
+
+void RosGraphMonitor::query_node_parameters(const std::string & node_name)
+{
+  // Non-blocking async call for parameter query. Hold onto the future to track completion.
+  params_futures[node_name] = query_params_(
+    node_name,
+    [this, node_name_copy = std::string(node_name)](
+      const rcl_interfaces::msg::ListParametersResult & result) {
+      RCLCPP_INFO(
+        logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(),
+        result.names.size());
+      auto it = nodes_.find(node_name_copy);
+      if (it == nodes_.end()) {
+        RCLCPP_WARN(logger_, "Node %s not found in tracking map", node_name_copy.c_str());
+        return;
+      }
+      auto & tracking = it->second;
+      tracking.params.clear();
+      tracking.params.reserve(result.names.size());
+      for (const auto & param_name : result.names) {
+        tracking.params.push_back(
+          ParameterTracking{param_name,
+            rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
+      }
+      if (!tracking.params.empty()) {
+        graph_change_callback_();
+      }
+    });
 }
 
 

@@ -708,6 +708,11 @@ void RosGraphMonitor::set_graph_change_callback(
 
 void RosGraphMonitor::query_node_parameters(const std::string & node_name)
 {
+  auto it = params_futures.find(node_name);
+  if (it != params_futures.end()) {
+    params_futures.erase(it);
+  }
+
   // Non-blocking async call for parameter query. Hold onto the future to track completion.
   params_futures[node_name] = query_params_(
     node_name,

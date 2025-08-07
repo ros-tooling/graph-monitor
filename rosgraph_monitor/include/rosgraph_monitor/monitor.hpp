@@ -163,6 +163,10 @@ public:
   /// @param callback Function to call when graph updates occur
   void set_graph_change_callback(std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback);
 
+  /// @brief Query parameters for a newly discovered node
+  /// @param node_name The name of the node to query parameters for
+  void query_node_parameters(const std::string & node_name);
+
 protected:
   /* Types */
 
@@ -257,10 +261,6 @@ protected:
     uint8_t level,
     const std::string & message,
     const std::string & subname) const;
-
-  /// @brief Query parameters for a newly discovered node
-  /// @param node_name The name of the node to query parameters for
-  void query_node_parameters(const std::string & node_name);
 
   /* Members */
 

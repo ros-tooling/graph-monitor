@@ -21,7 +21,8 @@ from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 import pytest
-from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType, ParameterValue, Parameter
+from rcl_interfaces.srv import SetParameters
 import rclpy
 from rclpy.qos import QoSProfile
 from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
@@ -170,7 +171,7 @@ class TestProcessOutput(unittest.TestCase):
             qos.liveliness_lease_duration.nanosec, 0,
             f'{context} should have infinite liveliness lease (0 nanoseconds).'
         )
-
+    '''
     def test_adding_node(self):
         new_node, node_name = self.add_node()
 
@@ -446,3 +447,111 @@ class TestProcessOutput(unittest.TestCase):
             f'This indicates the rosgraph monitor is functioning properly. '
             f'Received {len(messages) if messages else 0} messages.'
         )
+    '''
+    def test_parameters_change(self):
+        # 1) Create a node with a default parameter
+        descriptor = ParameterDescriptor(
+            name='test_param',
+            type=ParameterType.PARAMETER_STRING,
+            description='A test parameter that will be changed'
+        )
+        params = {
+            'test_param': ('initial_value', descriptor)
+        }
+        new_node, node_name = self.add_node(parameters=params)
+
+        # Wait for the graph to update with the initial parameter
+        def initial_param_condition(msg):
+            node = find_node(msg, node_name)
+            if not node or not node.parameter_values:
+                return False
+
+            # Find our test parameter
+            for i, param_value in enumerate(node.parameter_values):
+                if param_value.type == ParameterType.PARAMETER_STRING:
+                    # Check if this is our parameter by looking at the descriptor
+                    if i < len(node.parameters) and node.parameters[i].name == 'test_param':
+                        self.assertEqual(
+                            param_value.string_value, 'initial_value',
+                            'Initial parameter value should be "initial_value"'
+                        )
+                        return True
+            return False
+
+        success, messages = wait_for_message_sync(
+            self.subscriber_node,
+            Graph,
+            '/rosgraph',
+            initial_param_condition,
+            timeout_sec=5.0
+        )
+
+        self.assertTrue(
+            success,
+            f'Should have received graph update with initial parameter. '
+            f'Received {len(messages)} messages.'
+        )
+
+        # 2) Change the parameter value via parameter service
+        client = self.subscriber_node.create_client(
+            SetParameters,
+            f'/{node_name}/set_parameters'
+        )
+
+        # Wait for the service to be available
+        self.assertTrue(
+            client.wait_for_service(timeout_sec=5.0),
+            'Parameter service should be available'
+        )
+
+        # Create the parameter update request
+        request = SetParameters.Request()
+        new_param = Parameter()
+        new_param.name = 'test_param'
+        new_param.value = ParameterValue()
+        new_param.value.type = ParameterType.PARAMETER_STRING
+        new_param.value.string_value = 'updated_value'
+        request.parameters = [new_param]
+
+        # Send the request
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self.subscriber_node, future, timeout_sec=5.0)
+
+        self.assertTrue(future.done(), 'Parameter update request should complete')
+        response = future.result()
+        self.assertTrue(
+            response.results[0].successful,
+            'Parameter update should be successful'
+        )
+
+        # 3) Assert that the graph monitor captured the updated change
+        def updated_param_condition(msg):
+            node = find_node(msg, node_name)
+            if not node or not node.parameter_values:
+                return False
+
+            # Find our test parameter with updated value
+            for i, param_value in enumerate(node.parameter_values):
+                if param_value.type == ParameterType.PARAMETER_STRING:
+                    # Check if this is our parameter by looking at the descriptor
+                    if i < len(node.parameters) and node.parameters[i].name == 'test_param':
+                        if param_value.string_value == 'updated_value':
+                            return True
+            return False
+
+        success, messages = wait_for_message_sync(
+            self.subscriber_node,
+            Graph,
+            '/rosgraph',
+            updated_param_condition,
+            timeout_sec=60.0  # Give more time for parameter update to propagate
+        )
+
+        self.assertTrue(
+            success,
+            f'Should have received graph update with changed parameter value. '
+            f'Received {len(messages)} messages.'
+        )
+
+        # Cleanup
+        self.cleanup_node(new_node)

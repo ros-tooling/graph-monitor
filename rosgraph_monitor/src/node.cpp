@@ -21,8 +21,8 @@
 #include <string>
 
 #include "rclcpp/node.hpp"
-#include "rclcpp/parameter_client.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
+#include "rclcpp/parameter_client.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
@@ -78,6 +78,11 @@ Node::Node(const rclcpp::NodeOptions & options)
       "/topic_statistics",
       rclcpp::QoS{10},
       std::bind(&Node::on_topic_statistics, this, std::placeholders::_1))),
+  sub_param_events_(
+    create_subscription<rcl_interfaces::msg::ParameterEvent>(
+      "/parameter_events",
+      rclcpp::QoS{10},
+      std::bind(&Node::trigger_query_params, this, std::placeholders::_1))),
   pub_diagnostics_(
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics",
@@ -107,6 +112,14 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
+void Node::trigger_query_params(
+  const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+{
+
+  auto node_name = event->node;
+  // graph_monitor_.query_node_parameters(node_name);
+}
+
 std::shared_future<void> Node::query_params(
   const std::string & node_name,
   QueryParamsCallback callback)
@@ -118,6 +131,7 @@ std::shared_future<void> Node::query_params(
     this->get_node_services_interface(),
     node_name
   );
+
 
   return std::async(
     std::launch::async,

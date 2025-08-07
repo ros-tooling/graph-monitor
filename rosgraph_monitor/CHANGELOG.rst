@@ -2,6 +2,23 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Node Parameters on `/rosgraph` (`#26 <https://github.com/ros-tooling/graph-monitor/issues/26>`_)
+  * Graph monitor asynchronously queries parameter list for each tracked node, to know parameter names in graph representation
+* Implement publisher/subscriber attributes on `/rosgraph` (`#23 <https://github.com/ros-tooling/graph-monitor/issues/23>`_)
+  * Includes QoS profile mapping and enums
+* Publish node info under `/rosgraph` (`#20 <https://github.com/ros-tooling/graph-monitor/issues/20>`_)
+* Update package maintainers  (`#19 <https://github.com/ros-tooling/graph-monitor/issues/19>`_)
+  * Update package maintainers and add some author attributions to package.xml
+* Add useful set of precommit formatters and checks that enhance the ament linting (`#21 <https://github.com/ros-tooling/graph-monitor/issues/21>`_)
+* Use DiagnosticAggregator instead of custom Analyzer (`#16 <https://github.com/ros-tooling/graph-monitor/issues/16>`_)
+* Test the rmw_stats_shim topic_statistics in the CI build (`#18 <https://github.com/ros-tooling/graph-monitor/issues/18>`_)
+* Update package maintainers  (`#19 <https://github.com/ros-tooling/graph-monitor/issues/19>`_)
+  * Update package maintainers and add some author attributions to package.xml
+* Use new ParamListener usercallback to skip the additional OnSetParametersCallback logic (`#13 <https://github.com/ros-tooling/graph-monitor/issues/13>`_)
+* Contributors: Emerson Knapp, Troy Gibb
+
 0.1.2 (2025-05-12)
 ------------------
 * Kilted support (`#6 <https://github.com/ros-tooling/graph-monitor/issues/6>`_)

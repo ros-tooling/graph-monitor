@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.0 (2025-08-07)
+------------------
 * Add parameters to message definition (`#26 <https://github.com/ros-tooling/graph-monitor/issues/26>`_)
 * Add `Topic.msg` and `QosProfile.msg` (`#23 <https://github.com/ros-tooling/graph-monitor/issues/23>`_)
 * Add `NodeInfo.msg` and `Graph.msg` (`#20 <https://github.com/ros-tooling/graph-monitor/issues/20>`_)

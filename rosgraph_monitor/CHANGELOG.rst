@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.0 (2025-08-07)
+------------------
 * Node Parameters on `/rosgraph` (`#26 <https://github.com/ros-tooling/graph-monitor/issues/26>`_)
   * Graph monitor asynchronously queries parameter list for each tracked node, to know parameter names in graph representation
 * Implement publisher/subscriber attributes on `/rosgraph` (`#23 <https://github.com/ros-tooling/graph-monitor/issues/23>`_)

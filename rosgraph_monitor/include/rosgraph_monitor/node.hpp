@@ -65,7 +65,6 @@ protected:
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
   rclcpp::Publisher<rosgraph_monitor_msgs::msg::Graph>::SharedPtr pub_rosgraph_;
   rclcpp::TimerBase::SharedPtr timer_publish_report_;
-
 };
 
 }  // namespace rosgraph_monitor

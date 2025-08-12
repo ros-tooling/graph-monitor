@@ -115,7 +115,6 @@ void Node::update_params(const rosgraph_monitor::Params & params)
 void Node::trigger_query_params(
   const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
 {
-
   auto node_name = event->node;
   // graph_monitor_.query_node_parameters(node_name);
 }
@@ -131,7 +130,6 @@ std::shared_future<void> Node::query_params(
     this->get_node_services_interface(),
     node_name
   );
-
 
   return std::async(
     std::launch::async,

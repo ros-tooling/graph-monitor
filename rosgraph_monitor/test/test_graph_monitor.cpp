@@ -922,9 +922,23 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
 
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
 
+
   // Expect parameter values to match
-  EXPECT_EQ(node.parameter_values[0].integer_value, 42);
-  EXPECT_EQ(node.parameter_values[1].string_value, "Hello, World!");
+  std::vector<int64_t> int_values{};
+  std::vector<std::string> string_values{};
+  for (const auto & value : node.parameter_values) {
+    if (value.type == rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) {
+      int_values.push_back(value.integer_value);
+    } else if (value.type == rcl_interfaces::msg::ParameterType::PARAMETER_STRING) {
+      string_values.push_back(value.string_value);
+    }
+  }
+
+  // EXPECT_EQ(node.parameter_values[0].integer_value, 42);
+  // EXPECT_EQ(node.parameter_values[1].string_value, "Hello, World!");
+
+  EXPECT_THAT(int_values, testing::ElementsAre(42));
+  EXPECT_THAT(string_values, testing::ElementsAre("Hello, World!"));
 
   // Expect parameter descriptors to match
   EXPECT_EQ(node.parameters[0].name, "param1");

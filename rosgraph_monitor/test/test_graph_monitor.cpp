@@ -209,6 +209,7 @@ protected:
     EXPECT_CALL(*node_graph_, get_node_names)
     .WillRepeatedly(
       [this]() {
+        std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
         std::vector<std::string> node_names;
         for (const auto & node : mocked_nodes_) {
           node_names.push_back(node.name);
@@ -286,6 +287,7 @@ protected:
       QueryParamsCallback callback) {
         return std::async(
           std::launch::async, [this, node_name, callback]() {
+            std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
             for (const auto & node : mocked_nodes_) {
               if (node.name == node_name) {
                   callback(node.params.params, node.params.values, node.params.descriptors);
@@ -361,10 +363,13 @@ protected:
   void set_nodes(std::vector<MockedNode> nodes)
   {
     // Add the root namespace / onto the names, which should not be specified with it
-    mocked_nodes_.clear();
-    mocked_nodes_.reserve(nodes.size());
-    for (const auto & node : nodes) {
-      mocked_nodes_.push_back(node);
+    {
+      std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
+      mocked_nodes_.clear();
+      mocked_nodes_.reserve(nodes.size());
+      for (const auto & node : nodes) {
+        mocked_nodes_.push_back(node);
+      }
     }
     trigger_and_wait();
   }
@@ -482,6 +487,7 @@ protected:
   const std::string default_topic_name_ = "/topic1";
   const rclcpp::QoS default_qos_{10};
   std::vector<MockedNode> mocked_nodes_;
+  mutable std::mutex mocked_nodes_mutex_;  // Protect mocked_nodes_ access
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
@@ -881,8 +887,10 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
   param2_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
 
   rcl_interfaces::msg::ParameterValue param1_value;
+  param1_value.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   param1_value.integer_value = 42;
   rcl_interfaces::msg::ParameterValue param2_value;
+  param2_value.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
   param2_value.string_value = "Hello, World!";
 
   MockedParams mocked_params{};
@@ -921,24 +929,9 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
   }
 
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
+  EXPECT_EQ(node.parameter_values[0].integer_value, 42);
+  EXPECT_EQ(node.parameter_values[1].string_value, "Hello, World!");
 
-
-  // Expect parameter values to match
-  std::vector<int64_t> int_values{};
-  std::vector<std::string> string_values{};
-  for (const auto & value : node.parameter_values) {
-    if (value.type == rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) {
-      int_values.push_back(value.integer_value);
-    } else if (value.type == rcl_interfaces::msg::ParameterType::PARAMETER_STRING) {
-      string_values.push_back(value.string_value);
-    }
-  }
-
-  // EXPECT_EQ(node.parameter_values[0].integer_value, 42);
-  // EXPECT_EQ(node.parameter_values[1].string_value, "Hello, World!");
-
-  EXPECT_THAT(int_values, testing::ElementsAre(42));
-  EXPECT_THAT(string_values, testing::ElementsAre("Hello, World!"));
 
   // Expect parameter descriptors to match
   EXPECT_EQ(node.parameters[0].name, "param1");

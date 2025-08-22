@@ -293,6 +293,7 @@ protected:
   std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
   std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
   std::unordered_map<std::string, std::shared_future<void>> params_futures;
+  std::mutex params_futures_mutex_;
 };
 
 }  // namespace rosgraph_monitor

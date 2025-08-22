@@ -464,13 +464,18 @@ class TestProcessOutput(unittest.TestCase):
         def initial_param_condition(msg):
             node = find_node(msg, node_name)
             if not node or not node.parameter_values:
+                print(f'DEBUG: Node {node_name} not found or has no parameters.')
                 return False
 
             # Find our test parameter
             for i, param_value in enumerate(node.parameter_values):
+                # print(f'DEBUG: Parameter {i} - name: {param_value.name}, '
+                    #   f'type: {param_value.type}, value: {param_value.string_value}')
                 if param_value.type == ParameterType.PARAMETER_STRING:
+                    print(f'DEBUG: Found parameter with value: {param_value.string_value}')
                     # Check if this is our parameter by looking at the descriptor
                     if i < len(node.parameters) and node.parameters[i].name == 'test_param':
+                        print(f'DEBUG: Parameter matches test_param')
                         self.assertEqual(
                             param_value.string_value, 'initial_value',
                             'Initial parameter value should be "initial_value"'
@@ -544,7 +549,7 @@ class TestProcessOutput(unittest.TestCase):
             Graph,
             '/rosgraph',
             updated_param_condition,
-            timeout_sec=60.0  # Give more time for parameter update to propagate
+            timeout_sec=5.0  # Give more time for parameter update to propagate
         )
 
         self.assertTrue(

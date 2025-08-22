@@ -941,3 +941,52 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
   EXPECT_EQ(node.parameters[1].description, "Parameter 2");
   EXPECT_EQ(node.parameters[1].type, rcl_interfaces::msg::ParameterType::PARAMETER_STRING);
 }
+
+TEST_F(GraphMonitorTest, rosgraph_parallel_query_params) {
+  rcl_interfaces::msg::ListParametersResult param_list;
+  param_list.names = {"param1", "param2"};
+
+  rcl_interfaces::msg::ParameterDescriptor param1_desc;
+  param1_desc.name = "param1";
+  param1_desc.description = "Parameter 1";
+  param1_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+
+  rcl_interfaces::msg::ParameterValue param1_value;
+  param1_value.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  param1_value.integer_value = 42;
+  MockedParams mocked_params{};
+  mocked_params.params = param_list;
+  mocked_params.descriptors = {param1_desc};
+  mocked_params.values = {param1_value};
+
+  std::vector<MockedNode> mocked_nodes{
+    MockedNode("/node1", mocked_params),
+  };
+
+  set_nodes(mocked_nodes);
+  node_graph_->notify_graph_change();
+
+  // Wait for the graph message with parameters populated
+  // The parameter query is async, so we need to wait for it to complete
+  auto rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
+    },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for parameters to be populated"
+  );
+
+  // Verify the message contains the expected node and parameters
+  EXPECT_EQ(rosgraph_msg.nodes.size(), 1);
+  auto node = rosgraph_msg.nodes.front();
+  EXPECT_EQ(node.name, "/node1");
+  EXPECT_EQ(node.parameters.size(), 2);
+  EXPECT_EQ(node.parameter_values.size(), 2);
+
+
+
+  // Expect parameter descriptors to match
+  EXPECT_EQ(node.parameters[0].name, "param1");
+  EXPECT_EQ(node.parameters[0].description, "Parameter 1");
+  EXPECT_EQ(node.parameters[0].type, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
+}

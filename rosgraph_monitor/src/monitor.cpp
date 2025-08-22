@@ -708,10 +708,16 @@ void RosGraphMonitor::set_graph_change_callback(
 
 void RosGraphMonitor::query_node_parameters(const std::string & node_name)
 {
-  auto it = params_futures.find(node_name);
-  if (it != params_futures.end()) {
-    params_futures.erase(it);
-  }
+  std::lock_guard<std::mutex> lock(params_futures_mutex_);
+
+  // auto it = params_futures.find(node_name);
+  // if (it != params_futures.end()){
+    // if (it->second.valid()) {
+      // RCLCPP_INFO(logger_, "Node %s already has a parameter query in progress", node_name.c_str());
+      // return;
+    // }
+  // }
+
 
   // Non-blocking async call for parameter query. Hold onto the future to track completion.
   params_futures[node_name] = query_params_(
@@ -744,6 +750,8 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
         graph_change_callback_();
       }
     });
+
+
 }
 
 

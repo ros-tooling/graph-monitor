@@ -81,7 +81,7 @@ Node::Node(const rclcpp::NodeOptions & options)
   sub_param_events_(
     create_subscription<rcl_interfaces::msg::ParameterEvent>(
       "/parameter_events",
-      rclcpp::QoS{10},
+      rclcpp::QoS{10}.reliable(),
       std::bind(&Node::trigger_query_params, this, std::placeholders::_1))),
   pub_diagnostics_(
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
@@ -115,6 +115,10 @@ void Node::update_params(const rosgraph_monitor::Params & params)
 void Node::trigger_query_params(
   const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
 {
+  RCLCPP_INFO(
+    get_logger(),
+    "Parameter event received for node '%s', triggering parameter query",
+    event->node.c_str());
   auto node_name = event->node;
   // graph_monitor_.query_node_parameters(node_name);
 }

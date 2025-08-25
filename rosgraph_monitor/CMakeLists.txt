@@ -24,14 +24,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_link_options("-Wl,--no-undefined")
 endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(generate_parameter_library REQUIRED)
-
-find_package(diagnostic_msgs REQUIRED)
-find_package(diagnostic_updater REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_components REQUIRED)
-find_package(rosgraph_monitor_msgs REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies
 
 if("$ENV{ROS_DISTRO}" STREQUAL "humble")
   add_compile_definitions("ROS2_HUMBLE")
@@ -89,22 +83,25 @@ install(
     ${PROJECT_NAME}
     ${PROJECT_NAME}_generated_parameters
     ${PROJECT_NAME}_nodelib
-  EXPORT ${PROJECT_NAME}Targets
+  EXPORT ${PROJECT_NAME}_TARGETS
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
   INCLUDES DESTINATION include
 )
+install(
+  EXPORT ${PROJECT_NAME}_TARGETS
+  NAMESPACE ${PROJECT_NAME}::
+  DESTINATION share/${PROJECT_NAME}/cmake
+)
 
 if(BUILD_TESTING)
-  find_package(ament_cmake_gmock REQUIRED)
-  find_package(ament_lint_auto REQUIRED)
-
+  ament_auto_find_test_dependencies()
   ament_lint_auto_find_test_dependencies()
 
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor ${PROJECT_NAME})
 endif()
 
-ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
+ament_export_targets(${PROJECT_NAME}_TARGETS HAS_LIBRARY_TARGET)
 ament_package()

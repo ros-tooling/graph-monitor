@@ -23,11 +23,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(builtin_interfaces REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
-find_package(rcl_interfaces REQUIRED)
-
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   msg/NodeInfo.msg
@@ -42,23 +39,17 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  find_package(ament_cmake_gtest REQUIRED)
-  find_package(rclcpp REQUIRED)
-
+  ament_auto_find_test_dependencies()
   ament_lint_auto_find_test_dependencies()
 
   ament_add_gtest(test_qos_profile_constants
     test/test_qos_profile_constants.cpp
   )
-
-  target_link_libraries(test_qos_profile_constants
-    rclcpp::rclcpp
-  )
-
   rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
-  target_link_libraries(test_qos_profile_constants "${cpp_typesupport_target}")
-
+  target_link_libraries(test_qos_profile_constants
+    rmw::rmw
+    "${cpp_typesupport_target}"
+  )
 endif()
 
 ament_package()

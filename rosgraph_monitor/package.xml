@@ -16,7 +16,6 @@
 
   <depend>diagnostic_msgs</depend>
   <depend>diagnostic_updater</depend>
-  <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>rosgraph_monitor_msgs</depend>

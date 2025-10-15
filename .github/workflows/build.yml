@@ -27,7 +27,7 @@ jobs:
     container:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
-      ROS_DISTRO: ${{ matrix.ros }}
+      # NOTE(emersonknapp) - not setting ROS_DISTRO value because the buildfarm binary jobs don't have it set!
       RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
       DISABLE_GROUPS_WORKAROUND: "1"
     steps:

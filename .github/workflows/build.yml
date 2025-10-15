@@ -22,7 +22,7 @@ jobs:
             ubuntu: noble-testing
           - ros: rolling
             ubuntu: noble
-    name: ROS 2 ${{ matrix.ros }}
+    name: ROS 2 ${{ matrix.ros }} ${{ matrix.package }}
     container:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:

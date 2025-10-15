@@ -22,7 +22,7 @@ jobs:
             ubuntu: noble-testing
           - ros: rolling
             ubuntu: noble
-    name: ROS 2 ${{ matrix.ros }} ${{ matrix.package }}
+    name: ${{ matrix.package }} (${{ matrix.ros }})
     container:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
@@ -60,5 +60,5 @@ jobs:
             }
       - uses: actions/upload-artifact@v4
         with:
-          name: colcon-logs-${{ matrix.ros }}
+          name: colcon-logs__${{ matrix.package }}__${{ matrix.ros }}
           path: ros_ws/log

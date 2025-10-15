@@ -126,10 +126,13 @@ class TestProcessOutput(unittest.TestCase):
             None
 
         """
-        self.assertEqual(
-            qos.depth, expected_depth,
-            f'{context} should have correct QoS depth.'
-        )
+        # TODO(emersonknapp) this value isn't propagated in FastRTPS, reenable when/if it is supported
+        # Added to Kilted+ in https://github.com/ros2/rmw_fastrtps/pull/829,
+        # but unclear if backport to Jazzy/Humble possible
+        # self.assertEqual(
+        #     qos.depth, expected_depth,
+        #     f'{context} should have correct QoS depth.'
+        # )
         self.assertEqual(
             qos.history, QosProfileMsg.HISTORY_KEEP_LAST,
             f'{context} should have HISTORY_KEEP_LAST policy.'

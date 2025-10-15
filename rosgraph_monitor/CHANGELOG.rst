@@ -2,6 +2,11 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix dependency spec in package xmls, for buildfarm fixing (`#35 <https://github.com/ros-tooling/graph-monitor/issues/35>`_)
+* Contributors: Emerson Knapp
+
 0.2.0 (2025-08-07)
 ------------------
 * Node Parameters on `/rosgraph` (`#26 <https://github.com/ros-tooling/graph-monitor/issues/26>`_)

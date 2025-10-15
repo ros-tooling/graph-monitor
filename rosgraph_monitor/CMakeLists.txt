@@ -33,9 +33,12 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 
+message(STATUS "Detected ROS Distro $ENV{ROS_DISTRO}")
 if("$ENV{ROS_DISTRO}" STREQUAL "humble")
+  message(STATUS "Setting compile definition for ROS 2 Humble")
   add_compile_definitions("ROS2_HUMBLE")
 endif()
+
 
 # Library
 add_library(${PROJECT_NAME} SHARED

@@ -12,6 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        ros: [humble, jazzy, kilted, rolling]
+        package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         include:
           - ros: humble
             ubuntu: jammy
@@ -21,13 +23,13 @@ jobs:
             ubuntu: noble-testing
           - ros: rolling
             ubuntu: noble
-    name: ROS 2 ${{ matrix.ros }}
+    name: ${{ matrix.ros }} - ${{ matrix.package }}
     container:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
-      ROS_DISTRO: ${{ matrix.ros }}
-      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      # NOTE(emersonknapp) - not setting ROS_DISTRO value because the buildfarm binary jobs don't have it set!
       RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
+      DISABLE_GROUPS_WORKAROUND: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Create dependency repos file
@@ -47,8 +49,7 @@ jobs:
         with:
           target-ros2-distro: ${{ matrix.ros }}
           vcs-repo-file-url: /tmp/deps.repos
-          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs rosgraph_monitor_test
-          rosdep-skip-keys: rmw_connextdds
+          package-name: ${{ matrix.package }}
           colcon-defaults: |
             {
               "build": {
@@ -59,5 +60,5 @@ jobs:
             }
       - uses: actions/upload-artifact@v4
         with:
-          name: colcon-logs-${{ matrix.ros }}
+          name: colcon-logs__${{ matrix.package }}__${{ matrix.ros }}
           path: ros_ws/log

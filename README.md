@@ -15,11 +15,10 @@ See each package's README for more detailed information:
 
 | Distro | Dev | Doc |
 |--------|-----|-----|
-| Rolling | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdoc__graph_monitor__ubuntu_noble_amd64/) | 
+| Rolling | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdoc__graph_monitor__ubuntu_noble_amd64/) |
 | Kilted  | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Kdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Kdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Kdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Kdoc__graph_monitor__ubuntu_noble_amd64/) |
 | Jazzy   | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Jdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Jdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Jdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Jdoc__graph_monitor__ubuntu_noble_amd64/) |
 | Humble  | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Hdev__graph_monitor__ubuntu_jammy_amd64)](https://build.ros2.org/job/Hdev__graph_monitor__ubuntu_jammy_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Hdoc__graph_monitor__ubuntu_jammy_amd64)](https://build.ros2.org/job/Hdoc__graph_monitor__ubuntu_jammy_amd64/) |
-
 
 ### Package-level jobs
 

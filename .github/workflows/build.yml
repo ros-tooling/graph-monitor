@@ -12,8 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         ros: [humble, jazzy, kilted, rolling]
+        package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         include:
           - ros: humble
             ubuntu: jammy
@@ -28,8 +28,8 @@ jobs:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
       ROS_DISTRO: ${{ matrix.ros }}
-      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
       RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
+      DISABLE_GROUPS_WORKAROUND: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Create dependency repos file
@@ -50,7 +50,6 @@ jobs:
           target-ros2-distro: ${{ matrix.ros }}
           vcs-repo-file-url: /tmp/deps.repos
           package-name: ${{ matrix.package }}
-          rosdep-skip-keys: rmw_connextdds
           colcon-defaults: |
             {
               "build": {

@@ -126,17 +126,17 @@ class TestProcessOutput(unittest.TestCase):
             None
 
         """
-        # TODO(emersonknapp): this value isn't propagated in FastRTPS
+        # TODO(emersonknapp): History QoS isn't propagated in Fast-DDS
         #   Added to Kilted+ in https://github.com/ros2/rmw_fastrtps/pull/829,
         #   but unclear if backport to Jazzy/Humble possible
         # self.assertEqual(
         #     qos.depth, expected_depth,
         #     f'{context} should have correct QoS depth.'
         # )
-        self.assertEqual(
-            qos.history, QosProfileMsg.HISTORY_KEEP_LAST,
-            f'{context} should have HISTORY_KEEP_LAST policy.'
-        )
+        # self.assertEqual(
+        #     qos.history, QosProfileMsg.HISTORY_KEEP_LAST,
+        #     f'{context} should have HISTORY_KEEP_LAST policy.'
+        # )
         self.assertEqual(
             qos.reliability, QosProfileMsg.RELIABILITY_RELIABLE,
             f'{context} should have RELIABILITY_RELIABLE policy.'

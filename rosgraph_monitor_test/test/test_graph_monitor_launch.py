@@ -126,9 +126,9 @@ class TestProcessOutput(unittest.TestCase):
             None
 
         """
-        # TODO(emersonknapp) this value isn't propagated in FastRTPS, reenable when/if it is supported
-        # Added to Kilted+ in https://github.com/ros2/rmw_fastrtps/pull/829,
-        # but unclear if backport to Jazzy/Humble possible
+        # TODO(emersonknapp): this value isn't propagated in FastRTPS
+        #   Added to Kilted+ in https://github.com/ros2/rmw_fastrtps/pull/829,
+        #   but unclear if backport to Jazzy/Humble possible
         # self.assertEqual(
         #     qos.depth, expected_depth,
         #     f'{context} should have correct QoS depth.'

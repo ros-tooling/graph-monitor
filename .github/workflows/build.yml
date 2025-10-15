@@ -12,6 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         include:
           - ros: humble
             ubuntu: jammy
@@ -47,7 +48,7 @@ jobs:
         with:
           target-ros2-distro: ${{ matrix.ros }}
           vcs-repo-file-url: /tmp/deps.repos
-          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs rosgraph_monitor_test
+          package-name: ${{ matrix.package }}
           rosdep-skip-keys: rmw_connextdds
           colcon-defaults: |
             {

@@ -11,6 +11,18 @@ See each package's README for more detailed information:
 
 ## Release Status
 
+### Repo-level jobs
+
+| Distro | Dev | Doc |
+|--------|-----|-----|
+| Rolling | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Rdoc__graph_monitor__ubuntu_noble_amd64/) | 
+| Kilted  | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Kdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Kdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Kdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Kdoc__graph_monitor__ubuntu_noble_amd64/) |
+| Jazzy   | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Jdev__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Jdev__graph_monitor__ubuntu_noble_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Jdoc__graph_monitor__ubuntu_noble_amd64)](https://build.ros2.org/job/Jdoc__graph_monitor__ubuntu_noble_amd64/) |
+| Humble  | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Hdev__graph_monitor__ubuntu_jammy_amd64)](https://build.ros2.org/job/Hdev__graph_monitor__ubuntu_jammy_amd64/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Hdoc__graph_monitor__ubuntu_jammy_amd64)](https://build.ros2.org/job/Hdoc__graph_monitor__ubuntu_jammy_amd64/) |
+
+
+### Package-level jobs
+
 | Distro | Pkg | Src | Ubuntu amd64 |
 |--------|-----|-----|--------------|
 | Rolling | rmw_stats_shim        | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rsrc_uN__rmw_stats_shim__ubuntu_noble__source)](https://build.ros2.org/view/Rsrc_uN/job/Rsrc_uN__rmw_stats_shim__ubuntu_noble__source/) | [![Build Status](https://build.ros2.org/buildStatus/icon?job=Rbin_uN64__rmw_stats_shim__ubuntu_noble_amd64__binary)](https://build.ros2.org/view/Rsrc_uN/job/Rbin_uN64__rmw_stats_shim__ubuntu_noble_amd64__binary/) |

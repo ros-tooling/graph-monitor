@@ -33,12 +33,20 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 
-message(STATUS "Detected ROS Distro $ENV{ROS_DISTRO}")
-if("$ENV{ROS_DISTRO}" STREQUAL "humble")
-  message(STATUS "Setting compile definition for ROS 2 Humble")
-  add_compile_definitions("ROS2_HUMBLE")
+if(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.8)
+  set(DETECTED_ROS_DISTRO ROLLING)
+elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.7)
+  set(DETECTED_ROS_DISTRO KILTED)
+elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.5)
+  set(DETECTED_ROS_DISTRO JAZZY)
+elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 1.3)
+  set(DETECTED_ROS_DISTRO HUMBLE)
+else()
+  message(FATAL_ERROR "Could not associate ament_cmake version ${ament_cmake_VERSION} with a supported ROS 2 distribution")
 endif()
 
+message(STATUS "Detected ROS 2 distro ${DETECTED_ROS_DISTRO} from ament_cmake version ${ament_cmake_VERSION}")
+add_compile_definitions("ROS2_${DETECTED_ROS_DISTRO}")
 
 # Library
 add_library(${PROJECT_NAME} SHARED

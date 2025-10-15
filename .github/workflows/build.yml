@@ -13,6 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
+        ros: [humble, jazzy, kilted, rolling]
         include:
           - ros: humble
             ubuntu: jammy

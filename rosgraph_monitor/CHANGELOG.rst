@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.2 (2025-10-16)
+------------------
 * Fix release builds (`#36 <https://github.com/ros-tooling/graph-monitor/issues/36>`_)
   * don't depend on ROS_DISTRO environment variable, instead use detected package versions
 * Contributors: Emerson Knapp

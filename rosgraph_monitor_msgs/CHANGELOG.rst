@@ -2,6 +2,12 @@
 Changelog for package rosgraph_monitor_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix release builds (`#36 <https://github.com/ros-tooling/graph-monitor/issues/36>`_)
+  * add missing dependencies in package.xml
+* Contributors: Emerson Knapp
+
 0.2.1 (2025-10-15)
 ------------------
 * Fix dependency spec in package xmls, for buildfarm fixing (`#35 <https://github.com/ros-tooling/graph-monitor/issues/35>`_)

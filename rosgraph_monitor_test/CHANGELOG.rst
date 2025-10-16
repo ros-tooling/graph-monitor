@@ -2,6 +2,12 @@
 Changelog for package rosgraph_monitor_test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix release builds (`#36 <https://github.com/ros-tooling/graph-monitor/issues/36>`_)
+  * make tests pass against FastRTPS with its missing History QoS
+* Contributors: Emerson Knapp
+
 0.2.1 (2025-10-15)
 ------------------
 

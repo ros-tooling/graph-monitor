@@ -5,23 +5,26 @@
   <version>0.2.2</version>
   <description>Test package for rosgraph_monitor containing launch tests and test utilities</description>
   <maintainer email="troy@polymathrobotics.com">Troy Gibb</maintainer>
+  <maintainer email="emerson@polymathrobotics.com">Emerson Knapp</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
-
 
   <exec_depend>rclpy</exec_depend>
 
-  <test_depend>rosgraph_monitor_msgs</test_depend>
-  <test_depend>rosgraph_monitor</test_depend>
-  <test_depend>diagnostic_msgs</test_depend>
-  <test_depend>std_msgs</test_depend>
-  <test_depend>launch_ros</test_depend>
-  <test_depend>launch_testing_ament_cmake</test_depend>
-  <test_depend>launch_testing</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>diagnostic_msgs</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>rosgraph_monitor</test_depend>
+  <test_depend>rosgraph_monitor_msgs</test_depend>
+  <test_depend>rclcpp</test_depend>
+  <test_depend>std_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

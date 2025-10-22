@@ -2,6 +2,11 @@
 Changelog for package rosgraph_monitor_test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix circular dependency (`#38 <https://github.com/ros-tooling/graph-monitor/issues/38>`_)
+* Contributors: Emerson Knapp
+
 0.2.2 (2025-10-16)
 ------------------
 * Fix release builds (`#36 <https://github.com/ros-tooling/graph-monitor/issues/36>`_)

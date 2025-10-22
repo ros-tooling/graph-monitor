@@ -2,8 +2,8 @@
 Changelog for package rmw_stats_shim
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.3 (2025-10-22)
+------------------
 * Fix circular dependency (`#38 <https://github.com/ros-tooling/graph-monitor/issues/38>`_)
 * Contributors: Emerson Knapp
 

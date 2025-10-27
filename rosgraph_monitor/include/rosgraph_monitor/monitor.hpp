@@ -44,11 +44,16 @@
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
+typedef std::function<void (const rcl_interfaces::msg::ListParametersResult &,
+      const std::vector<rcl_interfaces::msg::ParameterValue> &, const
+      std::vector<rcl_interfaces::msg::ParameterDescriptor> &)>
+      QueryParamsCallback;
+
+
 typedef std::shared_future<void> QueryParamsReturnType;
 typedef std::function<QueryParamsReturnType(
       const std::string & node_name,
-      std::function<void (const rcl_interfaces::msg::ListParametersResult &)>
-      callback)> QueryParams;
+      QueryParamsCallback callback)> QueryParams;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template<>
@@ -158,16 +163,12 @@ public:
   /// @param callback Function to call when graph updates occur
   void set_graph_change_callback(std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback);
 
+  /// @brief Query parameters for a newly discovered node
+  /// @param node_name The name of the node to query parameters for
+  void query_node_parameters(const std::string & node_name);
+
 protected:
   /* Types */
-
-  struct ParameterTracking
-  {
-    std::string name;
-    uint8_t type;
-
-    rcl_interfaces::msg::ParameterDescriptor to_msg() const;
-  };
 
 
   /// @brief Keeps flags for tracking observed nodes over time
@@ -176,7 +177,8 @@ protected:
     std::string name;
     bool missing = false;
     bool stale = false;
-    std::vector<ParameterTracking> params;
+    std::vector<rcl_interfaces::msg::ParameterValue> param_values;
+    std::vector<rcl_interfaces::msg::ParameterDescriptor> param_descriptors;
 
     explicit NodeTracking(const std::string & name);
   };
@@ -260,10 +262,6 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
-  /// @brief Query parameters for a newly discovered node
-  /// @param node_name The name of the node to query parameters for
-  void query_node_parameters(const std::string & node_name);
-
   /* Members */
 
   // Configuration
@@ -295,6 +293,7 @@ protected:
   std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
   std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
   std::unordered_map<std::string, std::shared_future<void>> params_futures;
+  std::mutex params_futures_mutex_;
 };
 
 }  // namespace rosgraph_monitor

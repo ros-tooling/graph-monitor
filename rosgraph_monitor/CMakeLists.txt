@@ -24,29 +24,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_link_options("-Wl,--no-undefined")
 endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(generate_parameter_library REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
 
-find_package(diagnostic_msgs REQUIRED)
-find_package(diagnostic_updater REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_components REQUIRED)
-find_package(rosgraph_monitor_msgs REQUIRED)
-
-if(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.8)
-  set(DETECTED_ROS_DISTRO ROLLING)
-elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.7)
-  set(DETECTED_ROS_DISTRO KILTED)
-elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 2.5)
-  set(DETECTED_ROS_DISTRO JAZZY)
-elseif(${ament_cmake_VERSION} VERSION_GREATER_EQUAL 1.3)
-  set(DETECTED_ROS_DISTRO HUMBLE)
+if(NOT DEFINED ENV{ROS_DISTRO})
+  message(FATAL_ERROR "ROS_DISTRO environment variable not set")
 else()
-  message(FATAL_ERROR "Could not associate ament_cmake version ${ament_cmake_VERSION} with a supported ROS 2 distribution")
+  string(TOUPPER "$ENV{ROS_DISTRO}" ROS_DISTRO)
+  message(STATUS "Detected ROS 2 distro ${ROS_DISTRO} from environment")
+  add_compile_definitions("ROS2_${ROS_DISTRO}")
 endif()
-
-message(STATUS "Detected ROS 2 distro ${DETECTED_ROS_DISTRO} from ament_cmake version ${ament_cmake_VERSION}")
-add_compile_definitions("ROS2_${DETECTED_ROS_DISTRO}")
 
 # Library
 add_library(${PROJECT_NAME} SHARED
@@ -108,9 +95,7 @@ install(
 )
 
 if(BUILD_TESTING)
-  find_package(ament_cmake_gmock REQUIRED)
-  find_package(ament_lint_auto REQUIRED)
-
+  ament_auto_find_test_dependencies()
   ament_lint_auto_find_test_dependencies()
 
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)

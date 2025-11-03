@@ -29,10 +29,11 @@ ament_auto_find_build_dependencies()
 
 if(NOT DEFINED ENV{ROS_DISTRO})
   message(FATAL_ERROR "ROS_DISTRO environment variable not set")
+else()
+  string(TOUPPER "$ENV{ROS_DISTRO}" ROS_DISTRO)
+  message(STATUS "Detected ROS 2 distro ${ROS_DISTRO} from environment")
+  add_compile_definitions("ROS2_${ROS_DISTRO}")
 endif()
-
-message(STATUS "Detected ROS 2 distro $ENV{ROS_DISTRO} from environment")
-add_compile_definitions("ROS2_$ENV{ROS_DISTRO}")
 
 # Library
 add_library(${PROJECT_NAME} SHARED

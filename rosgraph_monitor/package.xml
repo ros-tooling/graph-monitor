@@ -12,7 +12,9 @@
   <author email="josh@electrifiedautonomy.com">Joshua Whitley</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
   <buildtool_depend>generate_parameter_library</buildtool_depend>
+  <buildtool_depend>ros_environment</buildtool_depend>
 
   <depend>diagnostic_msgs</depend>
   <depend>diagnostic_updater</depend>
@@ -25,10 +27,6 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gmock</test_depend>
-  <test_depend>launch_ros</test_depend>
-  <test_depend>launch_testing_ament_cmake</test_depend>
-  <test_depend>rmw_implementation</test_depend>
-  <test_depend>rmw_stats_shim</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

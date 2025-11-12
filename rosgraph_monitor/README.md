@@ -15,6 +15,12 @@ The monitor keeps track of the following entities and their relationships:
 
 - Node
   - name
+  - parameters
+  - publishers
+  - subscriptions
+- Parameter
+  - name
+  - type
 - Publisher
   - node
   - name
@@ -40,9 +46,16 @@ This also provides a `rosgraph_monitor_node` for standalone use, for users who d
 
 To set expectations for Topic Statistics Diagnostics, you must:
 
-1. Enable `/topic_statistics`, see [rmw_stats_shim](../rmw_stats_shim/) for how to do this
-1. Set the Deadline QoS policy on Publishers that should be sending at a fixed period (inverse of frequency)
-1. You do _not_ need to set Deadline on Subscription or use `DeadlineMissed` callbacks. Repeat - Subscriptions **do not** need any special treatment.
+1. Enable `/topic_statistics`. See [rmw_stats_shim](../rmw_stats_shim/) for how to do this
+1. Publishers that are expected to send at a fixed rate must set the Deadline QoS policy
+1. Subscriptions do not need any special treatment
+
+Note that the Deadline describes the expected _period_ of time between messages.
+This is the inverse of _frequency_.
+For example, if you expect your publisher to be publishing at 10Hz, then its Deadline is 0.1 seconds.
+
+The monitor is only using Deadline as a reporting mechanism for expected frequency of publishing - the underlying RMW implementation of the policy is not relevant.
+You do _not_ need to set the deadline on Subscriptions, or register any callbacks such as `DeadlineMissed`
 
 ## Usage
 
@@ -52,13 +65,13 @@ See [`RosGraphMonitor`](./include/rosgraph_monitor/monitor.hpp#L99)
 
 ### Node
 
-Recommended: run the provided launchfile
+Recommended: run the provided launchfile, which also launches a `DiagnosticsAggregator` to provide an appropriately interpreted `/diagnostics_agg` and `/diagnostics_toplevel_state`.
 
 ```bash
 ros2 launch rosgraph_monitor monitor_launch.yaml
 ```
 
-But you can also just run the standalone node, if you want to perform separate diagnostics aggregation
+But you may also just run the standalone node, if you want to perform separate diagnostics aggregation
 
 ```bash
 ros2 run rosgraph_monitor rosgraph_monitor_node
@@ -70,9 +83,13 @@ See [params_decl.yaml](./src/params_decl.yaml) for the full parameters for the `
 
 These parameters mirror the structure [`rosgraph_monitor::GraphMonitorConfiguration`](./include/rosgraph_monitor/monitor.hpp#L60), for those using the class directly instead of in the wrapping Node.
 
-## Implementation Tidbits
+## Visualization
+
+A Foxglove extension is provided that can visualize the the `rosgraph_monitor_msgs/Graph` message type that is published on the topic `/rosgraph` by the monitor node.
+
+https://github.com/polymathrobotics/foxglove_extensions/tree/main/ros2-graph
+
+## Implementation Notes
 
 The `RosgraphMonitor` class is built to not initiate any ROS communications, which means it can be used in any preexisting program or node.
-It is passed a `NodeGraphInterface` abstract class pointer to make queries about the graph structure, and is passed `TopicStatistics` messages
-
-The `RosgraphMonitor` receives a shared pointer to a node's `NodeGraphInterface` and receives `/topic_statistics` to monitor the ROS computation graph and produce `/diagnostics (DiagnosticArray)` about issues in the graph:
+It is passed a `NodeGraphInterface` abstract class pointer to make queries about the graph structure, and is passed `TopicStatistics` messages.

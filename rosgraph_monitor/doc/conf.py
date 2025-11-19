@@ -1,23 +1,9 @@
-# -- Project information -----------------------------------------------------
-project = 'rosgraph_monitor'
-author = 'rosgraph_monitor contributors'
-release = '0.0.0'
+extensions = ["myst_parser"]
 
 
-# -- General configuration ---------------------------------------------------
-extensions = [
-	'sphinx.ext.autodoc',
-	'sphinx.ext.intersphinx',
-	'sphinx.ext.todo',
-	'sphinx.ext.viewcode',
-	'breathe',
-    'myst_parser'
-]
-
-templates_path = ['_templates']
-source_suffix = ['.rst']
-master_doc = 'index'
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
-# Show TODOs if the todo extension is enabled
-todo_include_todos = True
+html_theme = 'alabaster'
+html_theme_options = {
+    "collapse_navigation": False,
+    "fixed_sidebar": True,
+    "navigation_depth": 4,
+}

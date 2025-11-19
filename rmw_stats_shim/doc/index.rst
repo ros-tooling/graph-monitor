@@ -1,11 +1,8 @@
-===============================================
-rmw_stats_shim
-===============================================
-
-.. mdinclude:: ../README.md
+.. include:: standard_docs/original/README.md
+   :parser: myst_parser.sphinx_
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   api/modules
+   cpp_api_docs

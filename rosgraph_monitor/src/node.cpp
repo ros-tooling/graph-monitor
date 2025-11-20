@@ -21,12 +21,13 @@
 #include <string>
 
 #include "rclcpp/node.hpp"
-#include "rclcpp/parameter_client.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
+#include "rclcpp/parameter_client.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
+#include "rcl_interfaces/msg/parameter.hpp"
 
 namespace
 {
@@ -77,6 +78,11 @@ Node::Node(const rclcpp::NodeOptions & options)
       "/topic_statistics",
       rclcpp::QoS{10},
       std::bind(&Node::on_topic_statistics, this, std::placeholders::_1))),
+  sub_param_events_(
+    create_subscription<rcl_interfaces::msg::ParameterEvent>(
+      "/parameter_events",
+      rclcpp::QoS{10}.reliable(),
+      std::bind(&Node::trigger_query_params, this, std::placeholders::_1))),
   pub_diagnostics_(
     create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "/diagnostics",
@@ -106,9 +112,20 @@ void Node::update_params(const rosgraph_monitor::Params & params)
   graph_monitor_.config() = create_graph_monitor_config(params_);
 }
 
+void Node::trigger_query_params(
+  const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+{
+  RCLCPP_INFO(
+    get_logger(),
+    "Parameter event received for node '%s', triggering parameter query",
+    event->node.c_str());
+  auto node_name = event->node;
+  // graph_monitor_.query_node_parameters(node_name);
+}
+
 std::shared_future<void> Node::query_params(
   const std::string & node_name,
-  std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)
+  QueryParamsCallback callback)
 {
   auto param_client = std::make_shared<rclcpp::AsyncParametersClient>(
     this->get_node_base_interface(),
@@ -145,8 +162,48 @@ std::shared_future<void> Node::query_params(
           continue;
         }
 
+        const auto & list_parameters_result = list_parameters.get();
+
+        auto parameter_values_future = param_client->get_parameters(
+          list_parameters_result.names);
+
+        if (parameter_values_future.wait_for(std::chrono::seconds(SERVICE_TIMEOUT_S)) !=
+        std::future_status::ready)
+        {          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter values query for node %s timed out, retrying in %d seconds",
+            node_name.c_str(), SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
+
+        auto describe_parameters_future =
+          param_client->describe_parameters(list_parameters_result.names);
+
+        if (describe_parameters_future.wait_for(std::chrono::seconds(SERVICE_TIMEOUT_S)) !=
+        std::future_status::ready)
+        {          RCLCPP_WARN(
+            rclcpp::get_logger("rosgraph_monitor"),
+            "Parameter describe query for node %s timed out, retrying in %d seconds",
+            node_name.c_str(), SERVICE_TIMEOUT_S);
+          rclcpp::sleep_for(std::chrono::seconds(SERVICE_TIMEOUT_S));
+          continue;
+        }
+
+        const auto & parameters = parameter_values_future.get();
+        const auto & describe_parameters = describe_parameters_future.get();
+
+        // Convert parameters to parameter values
+        std::vector<rcl_interfaces::msg::ParameterValue> parameter_values;
+        parameter_values.reserve(parameters.size());
+        for (const auto & param : parameters) {
+          parameter_values.push_back(param.get_value_message());
+        }
+
         params_received = true;
-        callback(list_parameters.get());
+        callback(list_parameters_result,
+                 parameter_values,
+                 describe_parameters);
       }
     });
 }

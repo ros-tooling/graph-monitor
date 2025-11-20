@@ -1,0 +1,13 @@
+type: 'rosdoc2 config'
+version: 1
+---
+settings:
+    always_run_doxygen: false
+    generate_package_index: true
+    always_run_sphinx_apidoc: true
+
+builders:
+    - sphinx: {
+        name: 'rosgraph_monitor_msgs',
+        output_dir: ''
+    }

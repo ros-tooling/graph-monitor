@@ -1,0 +1,18 @@
+type: 'rosdoc2 config'
+version: 1
+---
+settings:
+    always_run_doxygen: true
+    generate_package_index: true
+    always_run_sphinx_apidoc: true
+
+builders:
+    - doxygen: {
+        name: 'rmw_stats_shim Public C/C++ API',
+        output_dir: 'generated/doxygen'
+    }
+    - sphinx: {
+        name: 'rmw_stats_shim',
+        doxygen_xml_directory: 'generated/doxygen/xml',
+        output_dir: ''
+    }

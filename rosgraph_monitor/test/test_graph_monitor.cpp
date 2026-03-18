@@ -84,6 +84,19 @@ public:
   MOCK_METHOD(size_t, count_services, (const std::string &), (const, override));
   #endif
 
+  #if !defined(ROS2_HUMBLE) && !defined(ROS2_JAZZY) && !defined(ROS2_KILTED)
+  MOCK_METHOD(
+    (std::vector<rclcpp::ServiceEndpointInfo>),
+    get_clients_info_by_service,
+    (const std::string &, bool),
+    (const, override));
+  MOCK_METHOD(
+    (std::vector<rclcpp::ServiceEndpointInfo>),
+    get_servers_info_by_service,
+    (const std::string &, bool),
+    (const, override));
+  #endif
+
   void
   notify_graph_change() override
   {

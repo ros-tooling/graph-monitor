@@ -15,6 +15,7 @@
 #ifndef RMW_STATS_SHIM__TIMER_HPP_
 #define RMW_STATS_SHIM__TIMER_HPP_
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <functional>
@@ -57,7 +58,7 @@ private:
   std::function<void(void)> func_;
   std::chrono::milliseconds interval_;
   std::thread thread_;
-  bool running_ = false;
+  std::atomic<bool> running_ = false;
 };
 
 }  // namespace rmw_stats_shim

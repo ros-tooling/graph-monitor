@@ -324,6 +324,12 @@ StatCollector::StatCollector()
 
 StatCollector::~StatCollector()
 {
+  // Stop the timer first so its thread isn't iterating nodes_/publishers_/subscriptions_
+  // while ~StatPublisher tears them down below. Otherwise publishStatistics() can race
+  // nodes_.clear() and segfault on a freed StatPublisher.
+  if (timer_) {
+    timer_->stop();
+  }
   // It's important to destroy all the StatPublishers before the other member maps.
   // ~StatPublisher calls rmw_destroy_publisher, which triggers a graph event publish,
   // leading to rmw_publish->StatCollector::onPublish,

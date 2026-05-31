@@ -15,6 +15,7 @@
 #include "rosgraph_monitor/monitor.hpp"
 
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <utility>

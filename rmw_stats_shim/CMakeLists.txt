@@ -31,6 +31,7 @@ find_package(rmw REQUIRED)
 find_package(rosgraph_monitor_msgs REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
 find_package(rosidl_typesupport_cpp REQUIRED)
+find_package(Threads REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/shim.cpp
@@ -45,6 +46,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   rmw::rmw
   rosidl_runtime_cpp::rosidl_runtime_cpp
   rosidl_typesupport_cpp::rosidl_typesupport_cpp
+  Threads::Threads
   ${rosgraph_monitor_msgs_TARGETS}
 )
 

@@ -41,6 +41,15 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
+      # A missing artifact means that package's jobs never got as far as uploading.
+      # Create an empty directory so package shows up as a row with no tests rather than being missing.
+      - name: Backfill missing packages
+        shell: bash
+        run: |
+          for package in rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs rosgraph_monitor_test; do
+            mkdir -p "test-results/test-results-${{ matrix.ros }}-${package}"
+          done
+
       - name: Download PR number
         uses: actions/download-artifact@v4
         with:
@@ -57,14 +66,21 @@ jobs:
       - name: Test report
         uses: mikepenz/action-junit-report@v5
         with:
-          # One check_name per distro means one comment per distro, updated in place on re-runs.
-          check_name: '[${{ matrix.ros }}] Test Results'
-          report_paths: test-results/**/*.xml
+          check_name: |
+            [${{ matrix.ros }}] rmw_stats_shim
+            [${{ matrix.ros }}] rosgraph_monitor
+            [${{ matrix.ros }}] rosgraph_monitor_msgs
+            [${{ matrix.ros }}] rosgraph_monitor_test
+          report_paths: |
+            test-results/test-results-${{ matrix.ros }}-rmw_stats_shim/**/*.xml
+            test-results/test-results-${{ matrix.ros }}-rosgraph_monitor/**/*.xml
+            test-results/test-results-${{ matrix.ros }}-rosgraph_monitor_msgs/**/*.xml
+            test-results/test-results-${{ matrix.ros }}-rosgraph_monitor_test/**/*.xml
           detailed_summary: true
           include_passed: false
-          # Nothing is checked out here, so annotations would point at files that are not present.
-          # The build jobs annotate themselves directly via annotate_only.
-          check_annotations: false
+          # Nothing is checked out here, and the build jobs already annotate themselves via
+          # annotate_only. Without this each report path would also create its own check run.
+          skip_annotations: true
           # workflow_run does not carry the PR for fork runs, so both are passed explicitly.
           commit: ${{ github.event.workflow_run.head_sha }}
           pr_id: ${{ steps.pr.outputs.number }}

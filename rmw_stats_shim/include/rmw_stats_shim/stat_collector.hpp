@@ -23,11 +23,10 @@
 #include <unordered_set>
 
 #include "rcpputils/shared_library.hpp"
-#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rmw/rmw.h"
-
 #include "rmw_stats_shim/rolling_mean_accumulator.hpp"
 #include "rmw_stats_shim/timer.hpp"
+#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 typedef std::chrono::steady_clock MonoClock;
 typedef std::chrono::system_clock SysClock;
@@ -53,11 +52,7 @@ enum class EndpointType
 class EndpointStatistics
 {
 public:
-  EndpointStatistics(
-    EndpointType stat_type,
-    const char * topic_name,
-    const rmw_node_t * node,
-    size_t window_size);
+  EndpointStatistics(EndpointType stat_type, const char * topic_name, const rmw_node_t * node, size_t window_size);
   virtual ~EndpointStatistics() = default;
 
   void onMessage(MonoTime ts);
@@ -91,10 +86,7 @@ protected:
 class StatPublisher
 {
 public:
-  StatPublisher(
-    rcpputils::SharedLibrary * rmw_impl,
-    rmw_node_t * node,
-    std::string & stats_topic_name);
+  StatPublisher(rcpputils::SharedLibrary * rmw_impl, rmw_node_t * node, std::string & stats_topic_name);
   virtual ~StatPublisher();
   void publish(rosgraph_monitor_msgs::msg::TopicStatistics & msg) const;
 
@@ -137,9 +129,7 @@ public:
   void onPublish(const rmw_publisher_t * publisher);
   void addSubscription(rmw_subscription_t * subscription, const rmw_node_t * node);
   void removeSubscription(rmw_subscription_t * subscription);
-  void onReceive(
-    const rmw_subscription_t * subscription,
-    rmw_message_info_t * message_info = nullptr);
+  void onReceive(const rmw_subscription_t * subscription, rmw_message_info_t * message_info = nullptr);
   void publishStatistics();
 
 private:

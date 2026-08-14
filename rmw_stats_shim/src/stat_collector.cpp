@@ -14,6 +14,7 @@
 
 #include "rmw_stats_shim/stat_collector.hpp"
 
+#include <algorithm>
 #include <string>
 
 #include "rcpputils/env.hpp"
@@ -26,19 +27,19 @@ static const char * TSTAT_PUB_PERIOD_VAR = "ROS_TOPIC_STATISTICS_PUBLISH_PERIOD"
 namespace
 {
 
-template<typename T>
+template <typename T>
 size_t micros(T time)
 {
   return std::chrono::duration_cast<std::chrono::microseconds>(time.time_since_epoch()).count();
 }
 
-template<typename C, typename D>
+template <typename C, typename D>
 size_t nanos(std::chrono::time_point<C, D> time)
 {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
 }
 
-template<typename R, typename P>
+template <typename R, typename P>
 size_t nanos(std::chrono::duration<R, P> duration)
 {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
@@ -46,9 +47,7 @@ size_t nanos(std::chrono::duration<R, P> duration)
 
 inline void toLower(std::string & data)
 {
-  std::transform(
-    data.begin(), data.end(), data.begin(),
-    [](unsigned char c) {return std::tolower(c);});
+  std::transform(data.begin(), data.end(), data.begin(), [](unsigned char c) { return std::tolower(c); });
 }
 
 inline std::string getEnv(const char * env_var, const char * default_val)
@@ -60,7 +59,7 @@ inline std::string getEnv(const char * env_var, const char * default_val)
   return val;
 }
 
-template<typename C, typename D>
+template <typename C, typename D>
 builtin_interfaces::msg::Time timeMessage(std::chrono::time_point<C, D> time)
 {
   rmw_time_t rt = rmw_time_from_nsec(nanos(time.time_since_epoch()));
@@ -70,7 +69,7 @@ builtin_interfaces::msg::Time timeMessage(std::chrono::time_point<C, D> time)
   return msg;
 }
 
-template<typename C, typename D>
+template <typename C, typename D>
 builtin_interfaces::msg::Duration durationMessage(std::chrono::duration<C, D> time)
 {
   rmw_time_t rt = rmw_time_from_nsec(nanos(time));
@@ -91,21 +90,17 @@ std::string fully_qualified_node_name(const char * name, const char * namespace_
 
 }  // namespace
 
-
 namespace rmw_stats_shim
 {
 
 EndpointStatistics::EndpointStatistics(
-  EndpointType stat_type,
-  const char * topic_name,
-  const rmw_node_t * node,
-  size_t window_size)
-: node_(node),
-  type_(stat_type),
-  topic_name_(topic_name),
-  node_name_(fully_qualified_node_name(node->name, node->namespace_)),
-  period_acc_(window_size),
-  age_acc_(window_size)
+  EndpointType stat_type, const char * topic_name, const rmw_node_t * node, size_t window_size)
+: node_(node)
+, type_(stat_type)
+, topic_name_(topic_name)
+, node_name_(fully_qualified_node_name(node->name, node->namespace_))
+, period_acc_(window_size)
+, age_acc_(window_size)
 {}
 
 void EndpointStatistics::onMessage(MonoTime ts)
@@ -123,9 +118,9 @@ void EndpointStatistics::onMessage(MonoTime ts)
 rosgraph_monitor_msgs::msg::TopicStatistic EndpointStatistics::periodMsg()
 {
   rosgraph_monitor_msgs::msg::TopicStatistic msg;
-  msg.statistic_type = static_cast<uint8_t>(type_ == EndpointType::Publisher ?
-    rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD :
-    rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD);
+  msg.statistic_type = static_cast<uint8_t>(
+    type_ == EndpointType::Publisher ? rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD
+                                     : rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD);
   msg.node_name = node_name_;
   msg.topic_name = topic_name_;
   msg.window_count = period_acc_.dataCount();
@@ -162,20 +157,16 @@ rosgraph_monitor_msgs::msg::TopicStatistic EndpointStatistics::ageMsg()
 
 #define REINTERP(SYMBOL, LIB) reinterpret_cast<decltype(SYMBOL) *>(LIB->get_symbol(#SYMBOL))
 
-StatPublisher::StatPublisher(
-  rcpputils::SharedLibrary * rmw_impl,
-  rmw_node_t * node,
-  std::string & stats_topic_name)
-: node_(node),
-  create_publisher_(REINTERP(rmw_create_publisher, rmw_impl)),
-  destroy_publisher_(REINTERP(rmw_destroy_publisher, rmw_impl)),
-  publish_(REINTERP(rmw_publish, rmw_impl))
+StatPublisher::StatPublisher(rcpputils::SharedLibrary * rmw_impl, rmw_node_t * node, std::string & stats_topic_name)
+: node_(node)
+, create_publisher_(REINTERP(rmw_create_publisher, rmw_impl))
+, destroy_publisher_(REINTERP(rmw_destroy_publisher, rmw_impl))
+, publish_(REINTERP(rmw_publish, rmw_impl))
 {
   pub_opts_ = rmw_get_default_publisher_options();
   pub_ = create_publisher_(
     node,
-    rosidl_typesupport_cpp::get_message_type_support_handle<
-      rosgraph_monitor_msgs::msg::TopicStatistics>(),
+    rosidl_typesupport_cpp::get_message_type_support_handle<rosgraph_monitor_msgs::msg::TopicStatistics>(),
     stats_topic_name.c_str(),
     &rmw_qos_profile_default,
     &pub_opts_);
@@ -192,7 +183,6 @@ void StatPublisher::publish(rosgraph_monitor_msgs::msg::TopicStatistics & msg) c
   auto ret = publish_(pub_, &msg, nullptr);
   (void)ret;
 }
-
 
 StatCollector & StatCollector::instance()
 {
@@ -221,9 +211,7 @@ void StatCollector::removeNode(rmw_node_t * node)
 
 void StatCollector::addPublisher(rmw_publisher_t * publisher, const rmw_node_t * node)
 {
-  publishers_.try_emplace(
-    publisher,
-    EndpointType::Publisher, publisher->topic_name, node, window_size_);
+  publishers_.try_emplace(publisher, EndpointType::Publisher, publisher->topic_name, node, window_size_);
 }
 
 void StatCollector::removePublisher(rmw_publisher_t * publisher)
@@ -250,9 +238,7 @@ void StatCollector::addSubscription(rmw_subscription_t * subscription, const rmw
     // Seems more noisy than it's worth to also report on /topic_statistics
     return;
   }
-  subscriptions_.try_emplace(
-    subscription,
-    EndpointType::Subscription, subscription->topic_name, node, window_size_);
+  subscriptions_.try_emplace(subscription, EndpointType::Subscription, subscription->topic_name, node, window_size_);
 }
 
 void StatCollector::removeSubscription(rmw_subscription_t * subscription)
@@ -260,9 +246,7 @@ void StatCollector::removeSubscription(rmw_subscription_t * subscription)
   subscriptions_.erase(subscription);
 }
 
-void StatCollector::onReceive(
-  const rmw_subscription_t * subscription,
-  rmw_message_info_t * message_info)
+void StatCollector::onReceive(const rmw_subscription_t * subscription, rmw_message_info_t * message_info)
 {
   auto now = MonoClock::now();
   auto it = subscriptions_.find(subscription);
@@ -316,9 +300,7 @@ StatCollector::StatCollector()
   float pub_period_s = std::stof(pub_period_val);
   pub_period_ = std::chrono::milliseconds(static_cast<size_t>(pub_period_s * 1000));
 
-  timer_.emplace(
-    std::bind(&StatCollector::publishStatistics, this),
-    pub_period_);
+  timer_.emplace(std::bind(&StatCollector::publishStatistics, this), pub_period_);
   timer_->start();
 }
 

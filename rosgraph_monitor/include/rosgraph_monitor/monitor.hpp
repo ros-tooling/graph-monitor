@@ -15,14 +15,14 @@
 #ifndef ROSGRAPH_MONITOR__MONITOR_HPP_
 #define ROSGRAPH_MONITOR__MONITOR_HPP_
 
-#include <future>
 #include <functional>
-#include <thread>
+#include <future>
 #include <map>
 #include <memory>
 #include <optional>
 #include <regex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -30,34 +30,32 @@
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"
+#include "rcl_interfaces/msg/list_parameters_result.hpp"
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
+#include "rcl_interfaces/msg/parameter_type.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
-#include "rcl_interfaces/msg/parameter_descriptor.hpp"
-#include "rcl_interfaces/msg/parameter_type.hpp"
-#include "rcl_interfaces/msg/list_parameters_result.hpp"
-#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
+#include "rosgraph_monitor/event.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/qos_profile.hpp"
-
-#include "rosgraph_monitor/event.hpp"
+#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
 typedef std::shared_future<void> QueryParamsReturnType;
 typedef std::function<QueryParamsReturnType(
-      const std::string & node_name,
-      std::function<void (const rcl_interfaces::msg::ListParametersResult &)>
-      callback)> QueryParams;
+  const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)>
+  QueryParams;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
-template<>
+template <>
 struct std::hash<RosRmwGid>
 {
   std::size_t operator()(const RosRmwGid & id) const noexcept;
 };
 
-template<>
+template <>
 struct std::hash<std::pair<std::string, std::string>>
 {
   std::size_t operator()(const std::pair<std::string, std::string> & value) const noexcept;
@@ -127,8 +125,7 @@ public:
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
     QueryParams query_params,
-    GraphMonitorConfiguration config = GraphMonitorConfiguration{}
-  );
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
 
   virtual ~RosGraphMonitor();
 
@@ -169,7 +166,6 @@ protected:
     rcl_interfaces::msg::ParameterDescriptor to_msg() const;
   };
 
-
   /// @brief Keeps flags for tracking observed nodes over time
   struct NodeTracking
   {
@@ -201,10 +197,7 @@ protected:
 
     rosgraph_monitor_msgs::msg::Topic to_msg();
 
-    EndpointTracking(
-      const std::string & topic_name,
-      const rclcpp::TopicEndpointInfo & info,
-      const rclcpp::Time & now);
+    EndpointTracking(const std::string & topic_name, const rclcpp::TopicEndpointInfo & info, const rclcpp::Time & now);
   };
 
   typedef std::map<std::string, std::vector<std::string>> TopicsToTypes;
@@ -227,8 +220,7 @@ protected:
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
-  void track_node_updates(
-    const std::vector<std::string> & observed_node_names);
+  void track_node_updates(const std::vector<std::string> & observed_node_names);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_topics_and_types
@@ -239,20 +231,17 @@ protected:
     const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
 
   /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
-  std::optional<RosRmwGid> lookup_publisher(
-    const std::string & node_name, const std::string & topic_name) const;
+  std::optional<RosRmwGid> lookup_publisher(const std::string & node_name, const std::string & topic_name) const;
 
   /// @return Iterator to existing or added publisher, or nullopt if node ignored
   std::optional<EndpointTrackingMap::iterator> add_subscription(
     const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
 
   /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
-  std::optional<RosRmwGid> lookup_subscription(
-    const std::string & node_name, const std::string & topic_name) const;
+  std::optional<RosRmwGid> lookup_subscription(const std::string & node_name, const std::string & topic_name) const;
 
   bool topic_period_ok(
-    const rosgraph_monitor_msgs::msg::TopicStatistic & stat,
-    const rclcpp::Duration & deadline) const;
+    const rosgraph_monitor_msgs::msg::TopicStatistic & stat, const rclcpp::Duration & deadline) const;
 
   void statusWrapper(
     diagnostic_updater::DiagnosticStatusWrapper & msg,

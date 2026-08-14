@@ -18,8 +18,8 @@ namespace rmw_stats_shim
 {
 
 Timer::Timer(std::function<void(void)> func, std::chrono::milliseconds interval)
-: func_(func),
-  interval_(interval)
+: func_(func)
+, interval_(interval)
 {}
 
 Timer::~Timer()
@@ -41,9 +41,8 @@ void Timer::runThread()
   while (running_) {
     now = end_time;
     end_time = now + interval_;
-    while (
-      running_ &&
-      cv_.wait_until(lock, end_time) != std::cv_status::timeout) {}
+    while (running_ && cv_.wait_until(lock, end_time) != std::cv_status::timeout) {
+    }
     func_();
   }
 }
@@ -60,6 +59,5 @@ bool Timer::isRunning()
 {
   return running_;
 }
-
 
 }  // namespace rmw_stats_shim

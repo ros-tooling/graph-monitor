@@ -29,7 +29,7 @@
  * written to avoid dragging in boost dependencies.
  *
  */
-template<typename T>
+template <typename T>
 class RollingMeanAccumulator
 {
 public:

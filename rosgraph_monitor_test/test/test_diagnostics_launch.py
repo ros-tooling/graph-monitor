@@ -16,34 +16,33 @@ import os
 import threading
 import unittest
 
+import pytest
+import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
-import pytest
-import rclpy
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_test.test_utils import wait_for_message_sync
 from std_msgs.msg import Bool
+
+from rosgraph_monitor_test.test_utils import wait_for_message_sync
 
 
 @pytest.mark.launch_test
 def generate_test_description():
     return LaunchDescription([
         IncludeLaunchDescription(
-            PathSubstitution(FindPackageShare('rosgraph_monitor')) /
-            'launch' / 'monitor_launch.yaml',
-            launch_arguments=[('log_level', 'DEBUG')]
+            PathSubstitution(FindPackageShare('rosgraph_monitor')) / 'launch' / 'monitor_launch.yaml',
+            launch_arguments=[('log_level', 'DEBUG')],
         ),
         ReadyToTest(),
     ])
 
 
 class TestProcessOutput(unittest.TestCase):
-
     def setUp(self):
         # Initialize the ROS context for the test node
         rclpy.init()
@@ -62,8 +61,7 @@ class TestProcessOutput(unittest.TestCase):
 
         # Create publisher and timer to generate activity
         self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
-        self.publish_timer = self.publisher_node.create_timer(
-            timer_period_sec=0.1, callback=self.publisher_callback)
+        self.publish_timer = self.publisher_node.create_timer(timer_period_sec=0.1, callback=self.publisher_callback)
 
         self.spin_thread = threading.Thread(target=self.executor.spin)
         self.spin_thread.start()
@@ -84,19 +82,14 @@ class TestProcessOutput(unittest.TestCase):
     def test_diagnostics(self):
         # Wait for diagnostic message with all OK statuses
         def diagnostic_condition(msg):
-            return (len(msg.status) > 0 and
-                    all(status.level == DiagnosticStatus.OK for status in msg.status))
+            return len(msg.status) > 0 and all(status.level == DiagnosticStatus.OK for status in msg.status)
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            DiagnosticArray,
-            '/diagnostics_agg',
-            diagnostic_condition,
-            timeout_sec=5.0
+            self.subscriber_node, DiagnosticArray, '/diagnostics_agg', diagnostic_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
             success,
             f'Should have received at least one /diagnostics_agg message with all OK statuses. '
-            f'Received {len(messages)} messages.'
+            f'Received {len(messages)} messages.',
         )

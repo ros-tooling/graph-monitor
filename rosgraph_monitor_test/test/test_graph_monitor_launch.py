@@ -15,37 +15,34 @@
 import threading
 import unittest
 
+import pytest
+import rclpy
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
-import pytest
 from rcl_interfaces.msg import ParameterDescriptor
-import rclpy
 from rclpy.qos import QoSProfile
-from rosgraph_monitor_msgs.msg import Graph, QosProfile as QosProfileMsg
-from rosgraph_monitor_test.test_utils import (
-    create_random_node_name, find_node, wait_for_message_sync
-)
 from std_msgs.msg import Bool
+
+from rosgraph_monitor_msgs.msg import Graph
+from rosgraph_monitor_msgs.msg import QosProfile as QosProfileMsg
+from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
 
 
 @pytest.mark.launch_test
 def generate_test_description():
-
     return LaunchDescription([
         IncludeLaunchDescription(
-            PathSubstitution(FindPackageShare('rosgraph_monitor')) /
-            'launch' / 'monitor_launch.yaml',
-            launch_arguments=[('log_level', 'INFO')]
+            PathSubstitution(FindPackageShare('rosgraph_monitor')) / 'launch' / 'monitor_launch.yaml',
+            launch_arguments=[('log_level', 'INFO')],
         ),
         ReadyToTest(),
     ])
 
 
 class TestProcessOutput(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         # Initialize the ROS context for the test node
@@ -138,40 +135,25 @@ class TestProcessOutput(unittest.TestCase):
         #     f'{context} should have HISTORY_KEEP_LAST policy.'
         # )
         self.assertEqual(
-            qos.reliability, QosProfileMsg.RELIABILITY_RELIABLE,
-            f'{context} should have RELIABILITY_RELIABLE policy.'
+            qos.reliability, QosProfileMsg.RELIABILITY_RELIABLE, f'{context} should have RELIABILITY_RELIABLE policy.'
         )
         self.assertEqual(
-            qos.durability, QosProfileMsg.DURABILITY_VOLATILE,
-            f'{context} should have DURABILITY_VOLATILE policy.'
+            qos.durability, QosProfileMsg.DURABILITY_VOLATILE, f'{context} should have DURABILITY_VOLATILE policy.'
         )
         self.assertEqual(
-            qos.liveliness, QosProfileMsg.LIVELINESS_AUTOMATIC,
-            f'{context} should have LIVELINESS_AUTOMATIC policy.'
+            qos.liveliness, QosProfileMsg.LIVELINESS_AUTOMATIC, f'{context} should have LIVELINESS_AUTOMATIC policy.'
+        )
+        self.assertEqual(qos.deadline.sec, 0, f'{context} should have no deadline (0 seconds).')
+        self.assertEqual(qos.deadline.nanosec, 0, f'{context} should have no deadline (0 nanoseconds).')
+        self.assertEqual(qos.lifespan.sec, 0, f'{context} should have infinite lifespan (0 seconds).')
+        self.assertEqual(qos.lifespan.nanosec, 0, f'{context} should have infinite lifespan (0 nanoseconds).')
+        self.assertEqual(
+            qos.liveliness_lease_duration.sec, 0, f'{context} should have infinite liveliness lease (0 seconds).'
         )
         self.assertEqual(
-            qos.deadline.sec, 0,
-            f'{context} should have no deadline (0 seconds).'
-        )
-        self.assertEqual(
-            qos.deadline.nanosec, 0,
-            f'{context} should have no deadline (0 nanoseconds).'
-        )
-        self.assertEqual(
-            qos.lifespan.sec, 0,
-            f'{context} should have infinite lifespan (0 seconds).'
-        )
-        self.assertEqual(
-            qos.lifespan.nanosec, 0,
-            f'{context} should have infinite lifespan (0 nanoseconds).'
-        )
-        self.assertEqual(
-            qos.liveliness_lease_duration.sec, 0,
-            f'{context} should have infinite liveliness lease (0 seconds).'
-        )
-        self.assertEqual(
-            qos.liveliness_lease_duration.nanosec, 0,
-            f'{context} should have infinite liveliness lease (0 nanoseconds).'
+            qos.liveliness_lease_duration.nanosec,
+            0,
+            f'{context} should have infinite liveliness lease (0 nanoseconds).',
         )
 
     def test_adding_node(self):
@@ -185,40 +167,25 @@ class TestProcessOutput(unittest.TestCase):
 
             # Assert on equality of subscribers/publisher - new node should have
             # no publishers/subscribers
-            self.assertEqual(
-                len(test_node.subscriptions), 0,
-                'New node should not have any subscribers initially.'
-            )
+            self.assertEqual(len(test_node.subscriptions), 0, 'New node should not have any subscribers initially.')
             # Note: Due to implementation details, the node might have publishers from other nodes
             # Let's just check that it's the expected node for now
-            self.assertGreaterEqual(
-                len(test_node.publishers), 0,
-                'New node publisher count should be non-negative.'
-            )
+            self.assertGreaterEqual(len(test_node.publishers), 0, 'New node publisher count should be non-negative.')
             return True
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            new_node_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', new_node_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
-            success,
-            f'Should have received diagnostics for {node_name}. '
-            f'Received {len(messages)} messages.'
+            success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
         )
 
         # Remove the node and check diagnostics again
         self.cleanup_node(new_node)
 
     def test_adding_node_with_parameters(self):
-        params = {
-            'param1': 'value1',
-            'param2': 42
-        }
+        params = {'param1': 'value1', 'param2': 42}
         _, node_name = self.add_node(parameters=params)
 
         # Wait for the graph to update with the new parameters
@@ -232,12 +199,12 @@ class TestProcessOutput(unittest.TestCase):
                 return False
 
             def filter_params(param):
-                return param.name != 'use_sim_time' and \
-                       param.name != 'start_type_description_service'
+                return param.name != 'use_sim_time' and param.name != 'start_type_description_service'
 
             # Assert on the parameters
             self.assertCountEqual(
-                list(filter(filter_params,  updated_node.parameters)), [
+                list(filter(filter_params, updated_node.parameters)),
+                [
                     ParameterDescriptor(
                         name='param1',
                     ),
@@ -249,17 +216,11 @@ class TestProcessOutput(unittest.TestCase):
             return True
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            parameters_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', parameters_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
-            success,
-            f'Should have received diagnostics for {node_name}. '
-            f'Received {len(messages)} messages.'
+            success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
         )
 
     def test_adding_publisher(self):
@@ -267,8 +228,7 @@ class TestProcessOutput(unittest.TestCase):
 
         # Add a publisher to the new node
         qos = QoSProfile(depth=10)
-        test_publisher = new_node.create_publisher(
-            Bool, '/test_topic', qos)
+        test_publisher = new_node.create_publisher(Bool, '/test_topic', qos)
 
         # Wait for the graph to update with the new publisher
         def publisher_condition(msg):
@@ -283,38 +243,23 @@ class TestProcessOutput(unittest.TestCase):
                 return False
 
             # Assert that our publisher was added
-            self.assertGreaterEqual(
-                len(test_publishers), 1,
-                'Node should have at least one publisher with our topic.'
-            )
+            self.assertGreaterEqual(len(test_publishers), 1, 'Node should have at least one publisher with our topic.')
 
             # Verify publisher properties
             publisher = test_publishers[0]
-            self.assertEqual(
-                publisher.name, '/test_topic',
-                'Publisher should have correct topic name.'
-            )
-            self.assertEqual(
-                publisher.type, 'std_msgs/msg/Bool',
-                'Publisher should have correct message type.'
-            )
+            self.assertEqual(publisher.name, '/test_topic', 'Publisher should have correct topic name.')
+            self.assertEqual(publisher.type, 'std_msgs/msg/Bool', 'Publisher should have correct message type.')
 
             # Verify QoS properties
             self.assert_qos_properties(publisher.qos, expected_depth=10, context='Publisher')
             return True
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            publisher_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', publisher_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
-            success,
-            f'Should have received graph update with new publisher. '
-            f'Received {len(messages)} messages.'
+            success, f'Should have received graph update with new publisher. Received {len(messages)} messages.'
         )
 
         # Cleanup
@@ -329,68 +274,56 @@ class TestProcessOutput(unittest.TestCase):
         def callback(msg):
             pass
 
-        test_subscription = new_node.create_subscription(
-            Bool, '/test_sub_topic', callback, qos)
+        test_subscription = new_node.create_subscription(Bool, '/test_sub_topic', callback, qos)
 
         # Wait for the graph to update with the new subscription
         def subscription_condition(msg):
             # Find the subscriber node
             updated_node = find_node(msg, node_name)
             if not updated_node:
-                print(f'DEBUG: No subscriber node found. Available nodes: '
-                      f'{[n.name for n in msg.nodes]}')
+                print(f'DEBUG: No subscriber node found. Available nodes: {[n.name for n in msg.nodes]}')
                 return False
 
             # Find the specific subscription we added
-            test_subscriptions = [
-                sub for sub in updated_node.subscriptions
-                if sub.name == '/test_sub_topic'
-            ]
+            test_subscriptions = [sub for sub in updated_node.subscriptions if sub.name == '/test_sub_topic']
             if not test_subscriptions:
-                print(f'DEBUG: No test_sub_topic subscription found. '
-                      f'Available subscriptions: '
-                      f'{[s.name for s in updated_node.subscriptions]}')
+                print(
+                    f'DEBUG: No test_sub_topic subscription found. '
+                    f'Available subscriptions: '
+                    f'{[s.name for s in updated_node.subscriptions]}'
+                )
                 return False
 
             # Assert that our subscription was added
             self.assertGreaterEqual(
-                len(test_subscriptions), 1,
-                'Node should have at least one subscription with our topic.'
+                len(test_subscriptions), 1, 'Node should have at least one subscription with our topic.'
             )
 
             # Verify subscription properties
             subscription = test_subscriptions[0]
-            self.assertEqual(
-                subscription.name, '/test_sub_topic',
-                'Subscription should have correct topic name.'
-            )
-            self.assertEqual(
-                subscription.type, 'std_msgs/msg/Bool',
-                'Subscription should have correct message type.'
-            )
+            self.assertEqual(subscription.name, '/test_sub_topic', 'Subscription should have correct topic name.')
+            self.assertEqual(subscription.type, 'std_msgs/msg/Bool', 'Subscription should have correct message type.')
 
             # Verify QoS properties
-            print(f'DEBUG: Subscription QoS - depth: {subscription.qos.depth}, '
-                  f'history: {subscription.qos.history}, '
-                  f'reliability: {subscription.qos.reliability}')
-            print(f'DEBUG: Subscription QoS - deadline: '
-                  f'{subscription.qos.deadline.sec}s '
-                  f'{subscription.qos.deadline.nanosec}ns')
+            print(
+                f'DEBUG: Subscription QoS - depth: {subscription.qos.depth}, '
+                f'history: {subscription.qos.history}, '
+                f'reliability: {subscription.qos.reliability}'
+            )
+            print(
+                f'DEBUG: Subscription QoS - deadline: '
+                f'{subscription.qos.deadline.sec}s '
+                f'{subscription.qos.deadline.nanosec}ns'
+            )
             self.assert_qos_properties(subscription.qos, expected_depth=10, context='Subscription')
             return True
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            subscription_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', subscription_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
-            success,
-            f'Should have received graph update with new subscription. '
-            f'Received {len(messages)} messages.'
+            success, f'Should have received graph update with new subscription. Received {len(messages)} messages.'
         )
 
         # Cleanup
@@ -404,17 +337,11 @@ class TestProcessOutput(unittest.TestCase):
             return find_node(msg, node_name) is not None
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            new_node_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', new_node_condition, timeout_sec=5.0
         )
 
         self.assertTrue(
-            success,
-            f'Should have received graph update with new node {node_name}. '
-            f'Received {len(messages)} messages.'
+            success, f'Should have received graph update with new node {node_name}. Received {len(messages)} messages.'
         )
 
         # Remove the node
@@ -428,11 +355,7 @@ class TestProcessOutput(unittest.TestCase):
             return False
 
         success, messages = wait_for_message_sync(
-            self.subscriber_node,
-            Graph,
-            '/rosgraph',
-            removal_condition,
-            timeout_sec=5.0
+            self.subscriber_node, Graph, '/rosgraph', removal_condition, timeout_sec=5.0
         )
 
         # The test passes if we detect any change in the graph after node removal
@@ -441,5 +364,5 @@ class TestProcessOutput(unittest.TestCase):
             success,
             f'Should have detected some graph change after node removal. '
             f'This indicates the rosgraph monitor is functioning properly. '
-            f'Received {len(messages) if messages else 0} messages.'
+            f'Received {len(messages) if messages else 0} messages.',
         )

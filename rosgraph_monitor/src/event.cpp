@@ -44,11 +44,7 @@ bool Event::wait_for(const std::chrono::milliseconds & timeout)
     return true;
   }
   std::unique_lock<std::mutex> lock(mutex_);
-  return cv_.wait_for(
-    lock, timeout, [this]() {
-      return state_.load();
-    });
+  return cv_.wait_for(lock, timeout, [this]() { return state_.load(); });
 }
-
 
 }  // namespace rosgraph_monitor

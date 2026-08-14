@@ -10,14 +10,14 @@ repos:
       - id: dco-sign-off
 
   - repo: https://github.com/polymathrobotics/polymath_code_standard
-    rev: v2.3.0
+    rev: emerson/c-no-indent-extern
     hooks:
       # Basic checks and fixes that apply to any text file and the git repository itself
       - id: polymath-general
 
       # Enforce and insert copyright headers in source code for the project's license
-      - id: polymath-copyright
-        args: [--license, Apache-2.0, --copyright-org, 'Open Source Robotics Foundation, Inc.']
+      # - id: polymath-copyright
+      #   args: [--license, Apache-2.0, --wildcard-copyright-org, --reuse-style, --relicense]
 
       # Languages
       - id: polymath-cpp

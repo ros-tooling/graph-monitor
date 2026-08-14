@@ -50,7 +50,7 @@ public:
   /// @return False if the event was not set within the timeout
   bool wait_for(const std::chrono::milliseconds & timeout);
 
-  template<class Rep, class Period>
+  template <class Rep, class Period>
   bool wait_for(const std::chrono::duration<Rep, Period> & timeout)
   {
     return wait_for(std::chrono::duration_cast<std::chrono::milliseconds>(timeout));

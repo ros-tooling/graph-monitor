@@ -71,7 +71,7 @@ def wait_for_message_sync(node, message_type, topic, condition_func, timeout_sec
         message_type,
         topic,
         callback,
-        1  # QoS depth
+        1,  # QoS depth
     )
 
     # Create separate executor for this operation to avoid race condition

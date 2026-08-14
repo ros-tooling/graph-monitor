@@ -22,11 +22,10 @@
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "rclcpp/node.hpp"
+#include "rosgraph_monitor/monitor.hpp"
+#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 #include "rosgraph_monitor_msgs/msg/graph.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
-
-#include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
-#include "rosgraph_monitor/monitor.hpp"
 
 namespace rosgraph_monitor
 {
@@ -36,8 +35,7 @@ constexpr int SERVICE_TIMEOUT_S = 5;
 class Node : public rclcpp::Node
 {
 private:
-  static GraphMonitorConfiguration create_graph_monitor_config(
-    const rosgraph_monitor::Params & params);
+  static GraphMonitorConfiguration create_graph_monitor_config(const rosgraph_monitor::Params & params);
 
 public:
   explicit Node(const rclcpp::NodeOptions & options);
@@ -48,16 +46,14 @@ protected:
   void publish_diagnostics();
   void publish_rosgraph(rosgraph_monitor_msgs::msg::Graph rosgraph_msg);
   QueryParamsReturnType query_params(
-    const std::string & node_name,
-    std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
+    const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;
 
   RosGraphMonitor graph_monitor_;
 
-  rclcpp::Subscription<rosgraph_monitor_msgs::msg::TopicStatistics>::SharedPtr
-    sub_topic_statistics_;
+  rclcpp::Subscription<rosgraph_monitor_msgs::msg::TopicStatistics>::SharedPtr sub_topic_statistics_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diagnostics_;
   rclcpp::Publisher<rosgraph_monitor_msgs::msg::Graph>::SharedPtr pub_rosgraph_;
   rclcpp::TimerBase::SharedPtr timer_publish_report_;

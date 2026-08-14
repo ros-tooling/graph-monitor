@@ -137,9 +137,12 @@ rosgraph_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
   rosgraph_msgs::msg::Topic topic_msg;
   topic_msg.name = topic_name;
   topic_msg.type.name = info.topic_type();
+#ifndef ROS2_HUMBLE
+  // Humble's rclcpp does not expose the endpoint's type hash, so it is left at its default there.
   const auto & type_hash = info.topic_type_hash();
   topic_msg.type.hash.version = type_hash.version;
   std::copy(std::begin(type_hash.value), std::end(type_hash.value), topic_msg.type.hash.value.begin());
+#endif
   topic_msg.qos = rosgraph_monitor::to_msg(info.qos_profile());
   return topic_msg;
 }

@@ -3,6 +3,7 @@
 
 #include "rosgraph_monitor/monitor.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -90,9 +91,9 @@ void convert_maybe_inifite_durations(
   }
 }
 
-rosgraph_monitor_msgs::msg::QosProfile to_msg(const rclcpp::QoS & qos_profile)
+rosgraph_msgs::msg::QoSProfile to_msg(const rclcpp::QoS & qos_profile)
 {
-  rosgraph_monitor_msgs::msg::QosProfile qos_msg;
+  rosgraph_msgs::msg::QoSProfile qos_msg;
 
   qos_msg.history = static_cast<uint8_t>(qos_profile.history());
   qos_msg.reliability = static_cast<uint8_t>(qos_profile.reliability());
@@ -131,11 +132,14 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
 , last_stats_timestamp(now)
 {}
 
-rosgraph_monitor_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
+rosgraph_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
 {
-  rosgraph_monitor_msgs::msg::Topic topic_msg;
+  rosgraph_msgs::msg::Topic topic_msg;
   topic_msg.name = topic_name;
-  topic_msg.type = info.topic_type();
+  topic_msg.type.name = info.topic_type();
+  const auto & type_hash = info.topic_type_hash();
+  topic_msg.type.hash.version = type_hash.version;
+  std::copy(std::begin(type_hash.value), std::end(type_hash.value), topic_msg.type.hash.value.begin());
   topic_msg.qos = rosgraph_monitor::to_msg(info.qos_profile());
   return topic_msg;
 }
@@ -616,9 +620,8 @@ void RosGraphMonitor::statusWrapper(
   msg.hardware_id = "health";
 }
 
-void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
+void RosGraphMonitor::fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg)
 {
-  msg.timestamp = now_fn_();
   msg.nodes.clear();
 
   RCLCPP_DEBUG(logger_, "EVENT rosgraph message with %zu nodes", nodes_.size());
@@ -628,7 +631,7 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
       continue;
     }
 
-    rosgraph_monitor_msgs::msg::NodeInfo node_msg;
+    rosgraph_msgs::msg::Node node_msg;
     node_msg.name = node_name;
 
     for (const auto & param : node_info.params) {
@@ -654,10 +657,10 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
   }
 }
 
-void RosGraphMonitor::set_graph_change_callback(std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback)
+void RosGraphMonitor::set_graph_change_callback(std::function<void(rosgraph_msgs::msg::Graph &)> callback)
 {
   graph_change_callback_ = [callback, this]() {
-    rosgraph_monitor_msgs::msg::Graph msg;
+    rosgraph_msgs::msg::Graph msg;
     fill_rosgraph_msg(msg);
     callback(msg);
   };

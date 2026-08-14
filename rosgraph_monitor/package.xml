@@ -21,6 +21,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>rosgraph_monitor_msgs</depend>
+  <depend>rosgraph_msgs</depend>
 
   <exec_depend>diagnostic_aggregator</exec_depend>
 

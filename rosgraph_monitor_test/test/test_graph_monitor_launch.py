@@ -12,10 +12,10 @@ from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.qos import QoSProfile
+from rosgraph_msgs.msg import Graph
+from rosgraph_msgs.msg import QoSProfile as QosProfileMsg
 from std_msgs.msg import Bool
 
-from rosgraph_monitor_msgs.msg import Graph
-from rosgraph_monitor_msgs.msg import QosProfile as QosProfileMsg
 from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
 
 

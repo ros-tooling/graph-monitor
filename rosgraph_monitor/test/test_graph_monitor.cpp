@@ -267,7 +267,7 @@ protected:
         });
       });
 
-    graphmon_->set_graph_change_callback([this](rosgraph_monitor_msgs::msg::Graph & msg) {
+    graphmon_->set_graph_change_callback([this](rosgraph_msgs::msg::Graph & msg) {
       std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
       queue_.push_back(msg);
       graphmon_msg_cv_.notify_one();
@@ -280,23 +280,23 @@ protected:
     ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(10)));
   }
 
-  rosgraph_monitor_msgs::msg::Graph await_graphmon_msg()
+  rosgraph_msgs::msg::Graph await_graphmon_msg()
   {
     std::unique_lock<std::mutex> lock(graphmon_msg_mutex_);
     graphmon_msg_cv_.wait_for(lock, std::chrono::milliseconds(100), [this]() { return !queue_.empty(); });
-    rosgraph_monitor_msgs::msg::Graph msg = queue_.front();
+    rosgraph_msgs::msg::Graph msg = queue_.front();
     queue_.pop_front();
     return msg;
   }
 
   template <typename Predicate>
-  rosgraph_monitor_msgs::msg::Graph await_graphmon_msg_until(
+  rosgraph_msgs::msg::Graph await_graphmon_msg_until(
     Predicate condition,
     std::chrono::milliseconds timeout = std::chrono::milliseconds(1000),
     const std::string & timeout_message = "Timed out waiting for condition")
   {
     auto start_time = std::chrono::steady_clock::now();
-    rosgraph_monitor_msgs::msg::Graph msg;
+    rosgraph_msgs::msg::Graph msg;
 
     while (true) {
       msg = await_graphmon_msg();
@@ -432,7 +432,7 @@ protected:
   // Graph message handling
   std::mutex graphmon_msg_mutex_;
   std::condition_variable graphmon_msg_cv_;
-  std::deque<rosgraph_monitor_msgs::msg::Graph> queue_;
+  std::deque<rosgraph_msgs::msg::Graph> queue_;
 
   const std::string default_node_name_ = "testy0";
   const std::string default_topic_name_ = "/topic1";
@@ -764,7 +764,7 @@ TEST_F(GraphMonitorTest, rosgraph_generation)
   // Set up test nodes
   set_node_names({"node1", "node2", "node3"});
   // Generate rosgraph message
-  rosgraph_monitor_msgs::msg::Graph rosgraph_msg = await_graphmon_msg();
+  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg();
 
   // Verify the message contains expected nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 3);
@@ -776,9 +776,6 @@ TEST_F(GraphMonitorTest, rosgraph_generation)
   }
 
   EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
-
-  // Verify timestamp is set (should be current time in test environment)
-  EXPECT_EQ(rosgraph_msg.timestamp, now_);
 }
 
 TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes)
@@ -787,8 +784,8 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes)
   graphmon_->config().nodes.ignore_prefixes = {"/dummy"};
   set_node_names({"node1", "node2", "dummy/ignored_node"});
 
-  rosgraph_monitor_msgs::msg::Graph rosgraph_msg = await_graphmon_msg_until(
-    [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
       return msg.nodes.size() == 2;  // We expect only 2 nodes after ignoring
     },
     std::chrono::milliseconds(500),
@@ -819,7 +816,7 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
   // Wait for the graph message with parameters populated
   // The parameter query is async, so we need to wait for it to complete
   auto rosgraph_msg = await_graphmon_msg_until(
-    [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+    [](const rosgraph_msgs::msg::Graph & msg) {
       return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
     },
     std::chrono::milliseconds(500),

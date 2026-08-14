@@ -23,7 +23,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_qos_profile_constants
     rclcpp::rclcpp
-    ${rosgraph_monitor_msgs_TARGETS}
+    rosgraph_msgs::rosgraph_msgs
   )
 endif()
 

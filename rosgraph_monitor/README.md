@@ -85,7 +85,7 @@ These parameters mirror the structure [`rosgraph_monitor::GraphMonitorConfigurat
 
 ## Visualization
 
-A Foxglove extension is provided that can visualize the the `rosgraph_monitor_msgs/Graph` message type that is published on the topic `/rosgraph` by the monitor node.
+A Foxglove extension is provided that can visualize the the `rosgraph_msgs/Graph` message type that is published on the topic `/rosgraph` by the monitor node.
 
 https://github.com/polymathrobotics/foxglove_extensions/tree/main/ros2-graph
 

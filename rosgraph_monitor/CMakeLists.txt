@@ -32,10 +32,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
 target_link_libraries(${PROJECT_NAME} PUBLIC
+  diagnostic_msgs::diagnostic_msgs
   diagnostic_updater::diagnostic_updater
   rclcpp::rclcpp
-  ${diagnostic_msgs_TARGETS}
-  ${rosgraph_monitor_msgs_TARGETS}
+  rosgraph_monitor_msgs::rosgraph_monitor_msgs
+  rosgraph_msgs::rosgraph_msgs
 )
 
 generate_parameter_library(${PROJECT_NAME}_generated_parameters
@@ -52,9 +53,10 @@ target_include_directories(${PROJECT_NAME}_nodelib PUBLIC
 target_link_libraries(${PROJECT_NAME}_nodelib PUBLIC
   ${PROJECT_NAME}
   ${PROJECT_NAME}_generated_parameters
+  diagnostic_msgs::diagnostic_msgs
   rclcpp_components::component
-  ${diagnostic_msgs_TARGETS}
-  ${rosgraph_monitor_msgs_TARGETS}
+  rosgraph_monitor_msgs::rosgraph_monitor_msgs
+  rosgraph_msgs::rosgraph_msgs
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}_nodelib

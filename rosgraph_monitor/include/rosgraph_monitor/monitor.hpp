@@ -26,9 +26,10 @@
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor/event.hpp"
-#include "rosgraph_monitor_msgs/msg/graph.hpp"
-#include "rosgraph_monitor_msgs/msg/qos_profile.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
+#include "rosgraph_msgs/msg/graph.hpp"
+#include "rosgraph_msgs/msg/qo_s_profile.hpp"
+#include "rosgraph_msgs/msg/topic.hpp"
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 
@@ -138,11 +139,11 @@ public:
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & statistics);
 
   /// @brief Fill a Graph message containing current graph state
-  void fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg);
+  void fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg);
 
   /// @brief Set callback function to be called when graph changes
   /// @param callback Function to call when graph updates occur
-  void set_graph_change_callback(std::function<void(rosgraph_monitor_msgs::msg::Graph &)> callback);
+  void set_graph_change_callback(std::function<void(rosgraph_msgs::msg::Graph &)> callback);
 
 protected:
   /* Types */
@@ -184,7 +185,7 @@ protected:
     rclcpp::Time last_stats_timestamp;
     std::optional<rosgraph_monitor_msgs::msg::TopicStatistic> period_stat;
 
-    rosgraph_monitor_msgs::msg::Topic to_msg();
+    rosgraph_msgs::msg::Topic to_msg();
 
     EndpointTracking(const std::string & topic_name, const rclcpp::TopicEndpointInfo & info, const rclcpp::Time & now);
   };

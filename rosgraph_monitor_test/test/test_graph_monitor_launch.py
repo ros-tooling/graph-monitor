@@ -12,10 +12,10 @@ from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.qos import QoSProfile
+from rosgraph_msgs.msg import Graph
+from rosgraph_msgs.msg import QoSProfile as QosProfileMsg
 from std_msgs.msg import Bool
 
-from rosgraph_monitor_msgs.msg import Graph
-from rosgraph_monitor_msgs.msg import QosProfile as QosProfileMsg
 from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
 
 
@@ -236,7 +236,7 @@ class TestProcessOutput(unittest.TestCase):
             # Verify publisher properties
             publisher = test_publishers[0]
             self.assertEqual(publisher.name, '/test_topic', 'Publisher should have correct topic name.')
-            self.assertEqual(publisher.type, 'std_msgs/msg/Bool', 'Publisher should have correct message type.')
+            self.assertEqual(publisher.type.name, 'std_msgs/msg/Bool', 'Publisher should have correct message type.')
 
             # Verify QoS properties
             self.assert_qos_properties(publisher.qos, expected_depth=10, context='Publisher')
@@ -290,7 +290,9 @@ class TestProcessOutput(unittest.TestCase):
             # Verify subscription properties
             subscription = test_subscriptions[0]
             self.assertEqual(subscription.name, '/test_sub_topic', 'Subscription should have correct topic name.')
-            self.assertEqual(subscription.type, 'std_msgs/msg/Bool', 'Subscription should have correct message type.')
+            self.assertEqual(
+                subscription.type.name, 'std_msgs/msg/Bool', 'Subscription should have correct message type.'
+            )
 
             # Verify QoS properties
             print(

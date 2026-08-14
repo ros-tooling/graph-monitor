@@ -20,7 +20,7 @@ jobs:
           - ros: jazzy
             ubuntu: noble
           - ros: kilted
-            ubuntu: noble
+            ubuntu: noble-testing
           - ros: lyrical
             ubuntu: resolute
           - ros: rolling

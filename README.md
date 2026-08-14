@@ -5,7 +5,7 @@ The packages in this repository implement monitoring for an entire ROS node grap
 See each package's README for information on its design and usage:
 
 * [rosgraph_monitor](./rosgraph_monitor/) - A library and node to monitor the ROS graph, publish periodic snapshots, and emit diagnostics reflecting analyses of its health
-* [rosgraph_monitor_msgs](./rosgraph_monitor_msgs/) - Messages for describing the ROS graph and topic statistics
+* [rosgraph_monitor_msgs](./rosgraph_monitor_msgs/) - Messages for reporting topic statistics
 * [rmw_stats_shim](./rmw_stats_shim/) - RMW wrapper to efficiently gather and report global topic statistics
 
 For development workflows and context, see [DEVELOPING.md](./DEVELOPING.md)
@@ -68,7 +68,7 @@ Documentation pages for each package are published on docs.ros.org. Quick links 
 
 This repository's scope is monitoring, reporting, and analysis of the ROS graph.
 
-A Foxglove extension is [available in the public registry](https://github.com/polymathrobotics/foxglove_extensions/tree/main/ros2-graph) that can visualize the the `rosgraph_monitor_msgs/Graph` message type that is published on the topic `/rosgraph` by the monitor node.
+A Foxglove extension is [available in the public registry](https://github.com/polymathrobotics/foxglove_extensions/tree/main/ros2-graph) that can visualize the the `rosgraph_msgs/Graph` message type that is published on the topic `/rosgraph` by the monitor node.
 
 ## Similar projects
 

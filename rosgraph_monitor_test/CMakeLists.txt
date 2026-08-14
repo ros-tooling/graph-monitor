@@ -10,6 +10,15 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+# Matches rosgraph_monitor, so tests can guard on distro-specific API
+if(NOT DEFINED ENV{ROS_DISTRO})
+  message(FATAL_ERROR "ROS_DISTRO environment variable not set")
+else()
+  string(TOUPPER "$ENV{ROS_DISTRO}" ROS_DISTRO)
+  message(STATUS "Detected ROS 2 distro ${ROS_DISTRO} from environment")
+  add_compile_definitions("ROS2_${ROS_DISTRO}")
+endif()
+
 ament_python_install_package(${PROJECT_NAME})
 
 if(BUILD_TESTING)

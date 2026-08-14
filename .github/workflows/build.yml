@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros: [humble, jazzy, kilted, rolling]
+        ros: [humble, jazzy, kilted, lyrical, rolling]
         package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         include:
           - ros: humble
@@ -20,14 +20,15 @@ jobs:
           - ros: jazzy
             ubuntu: noble
           - ros: kilted
-            ubuntu: noble-testing
-          - ros: rolling
             ubuntu: noble
+          - ros: lyrical
+            ubuntu: resolute
+          - ros: rolling
+            ubuntu: resolute-testing
     name: ${{ matrix.ros }} - ${{ matrix.package }}
     container:
       image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-${{ matrix.ubuntu }}:latest
     env:
-      # NOTE(emersonknapp) - not setting ROS_DISTRO value because the buildfarm binary jobs don't have it set!
       RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
       DISABLE_GROUPS_WORKAROUND: '1'
     steps:
@@ -58,7 +59,48 @@ jobs:
                 ]
               }
             }
+
+      - name: Gather test results
+        if: ${{ !cancelled() }}
+        shell: bash
+        working-directory: ros_ws
+        run: |
+          TEST_RESULT_DEST=.ci/test-results
+          mkdir -p "$TEST_RESULT_DEST"
+          colcon test-result --verbose --all > "$TEST_RESULT_DEST"/summary.log || true
+          mapfile -t TEST_RESULT_FILES < <(colcon test-result --result-files-only --all)
+          if [[ ${#TEST_RESULT_FILES[@]} -gt 0 ]]; then
+            cp --parents "${TEST_RESULT_FILES[@]}" "$TEST_RESULT_DEST"
+          fi
+          colcon test-result
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results-${{ matrix.ros }}-${{ matrix.package }}
+          path: ros_ws/.ci/test-results
+
+      - name: Test Report
+        uses: mikepenz/action-junit-report@v5
+        if: ${{ !cancelled() }}
+        with:
+          check_name: '[${{ matrix.ros }}] ${{ matrix.package }} Test Results'
+          report_paths: ros_ws/.ci/test-results/**/test_results/**/*.xml
+          detailed_summary: true
+          include_passed: false
+          # Annotate this job rather than creating a separate check run, so failures show up
+          # in this job's own view. The PR comment is posted once by the aggregate job below.
+          annotate_only: true
+
+  pr_number:
+    name: Record PR number
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save PR number
+        run: echo "${{ github.event.number }}" > pr_number.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: colcon-logs__${{ matrix.package }}__${{ matrix.ros }}
-          path: ros_ws/log
+          name: pr-number
+          path: pr_number.txt

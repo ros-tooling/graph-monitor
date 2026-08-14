@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros: [humble, jazzy, kilted, rolling]
+        ros: [humble, jazzy, kilted, lyrical, rolling]
         package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test]
         include:
           - ros: humble
@@ -60,6 +60,7 @@ jobs:
               }
             }
       - name: Gather test results
+        shell: bash
         working-directory: ros_ws
         run: |
           TEST_RESULT_DEST=.ci/test-results

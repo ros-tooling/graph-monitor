@@ -12,7 +12,6 @@ ament_python_install_package(${PROJECT_NAME})
 
 if(BUILD_TESTING)
   ament_auto_find_test_dependencies()
-  ament_lint_auto_find_test_dependencies()
 
   add_launch_test(test/test_graph_monitor_launch.py)
   add_launch_test(test/test_diagnostics_launch.py)

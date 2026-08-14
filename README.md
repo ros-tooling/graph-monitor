@@ -8,6 +8,8 @@ See each package's README for information on its design and usage:
 * [rosgraph_monitor_msgs](./rosgraph_monitor_msgs/) - Messages for describing the ROS graph and topic statistics
 * [rmw_stats_shim](./rmw_stats_shim/) - RMW wrapper to efficiently gather and report global topic statistics
 
+For development workflows and context, see [DEVELOPING.md](./DEVELOPING.md)
+
 ## Documentation
 
 Documentation pages for each package are published on docs.ros.org. Quick links by distribution:
@@ -18,8 +20,6 @@ Documentation pages for each package are published on docs.ros.org. Quick links 
 | Kilted | [docs](https://docs.ros.org/en/kilted/p/rmw_stats_shim/) | [docs](https://docs.ros.org/en/kilted/p/rosgraph_monitor_msgs/) | [docs](https://docs.ros.org/en/kilted/p/rosgraph_monitor/) |
 | Jazzy | [docs](https://docs.ros.org/en/jazzy/p/rmw_stats_shim/) | [docs](https://docs.ros.org/en/jazzy/p/rosgraph_monitor_msgs/) | [docs](https://docs.ros.org/en/jazzy/p/rosgraph_monitor/) |
 | Humble | [docs](https://docs.ros.org/en/humble/p/rmw_stats_shim/) | [docs](https://docs.ros.org/en/humble/p/rosgraph_monitor_msgs/) | [docs](https://docs.ros.org/en/humble/p/rosgraph_monitor/) |
-
-If you want I can extend this table to include additional distros or replace the shorthand `docs` label with more descriptive text.
 
 ## Release Status
 

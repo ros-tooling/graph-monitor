@@ -1,26 +1,17 @@
 ---
 name: Lint
-"on":
+on:
+  push:
+    branches: [main]
   pull_request:
 
-env:
-  AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS: true
-
 jobs:
-  ament_lint_general:
-    strategy:
-      fail-fast: false
-      matrix:
-        linter: [copyright, cppcheck, cpplint, flake8, xmllint]
-    name: ament_${{ matrix.linter }}
+  pre-commit:
     runs-on: ubuntu-latest
-    container:
-      image: rostooling/setup-ros-docker:ubuntu-jammy-ros-rolling-ros-base-latest
+    name: Pre-commit Checks
     steps:
-      - uses: actions/checkout@v4
-      - uses: ros-tooling/action-ros-lint@v0.1
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          linter: ${{ matrix.linter }}
-          arguments: ${{ matrix.arguments }}
-          distribution: rolling
-          package-name: rmw_stats_shim rosgraph_monitor rosgraph_monitor_msgs rosgraph_monitor_test
+          python-version: '3.10'
+      - uses: pre-commit/action@v3.0.1

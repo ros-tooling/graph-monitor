@@ -1,4 +1,4 @@
 # Produced by launch_testing
-__pycache__
-
-.devcontainer
+__pycache__/
+/.devcontainer
+/.ruff.toml

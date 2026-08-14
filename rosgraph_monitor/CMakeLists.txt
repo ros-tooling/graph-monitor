@@ -96,7 +96,6 @@ install(
 
 if(BUILD_TESTING)
   ament_auto_find_test_dependencies()
-  ament_lint_auto_find_test_dependencies()
 
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor ${PROJECT_NAME})

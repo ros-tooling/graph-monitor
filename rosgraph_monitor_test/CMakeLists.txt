@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 Polymath Robotics, Inc.
 # SPDX-License-Identifier: Apache-2.0
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.22)
 project(rosgraph_monitor_test)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")

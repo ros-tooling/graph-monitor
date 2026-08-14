@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 Polymath Robotics, Inc.
+# SPDX-License-Identifier: Apache-2.0
 cmake_minimum_required(VERSION 3.8)
 project(rosgraph_monitor_test)
 
@@ -12,7 +14,6 @@ ament_python_install_package(${PROJECT_NAME})
 
 if(BUILD_TESTING)
   ament_auto_find_test_dependencies()
-  ament_lint_auto_find_test_dependencies()
 
   add_launch_test(test/test_graph_monitor_launch.py)
   add_launch_test(test/test_diagnostics_launch.py)

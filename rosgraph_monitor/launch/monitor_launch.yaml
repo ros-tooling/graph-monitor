@@ -11,7 +11,7 @@ launch:
       default: $(find-pkg-share rosgraph_monitor)/config/diagnostic_aggregator_params.yaml
   - arg:
       name: diagnostics_agg
-      default: "true"
+      default: 'true'
   - arg:
       name: log_level
       default: INFO

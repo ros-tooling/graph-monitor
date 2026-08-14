@@ -1,16 +1,5 @@
-// Copyright 2024, Bonsai Robotics, Inc - All Rights Reserved
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef RMW_STATS_SHIM__STAT_COLLECTOR_HPP_
 #define RMW_STATS_SHIM__STAT_COLLECTOR_HPP_
@@ -23,11 +12,10 @@
 #include <unordered_set>
 
 #include "rcpputils/shared_library.hpp"
-#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rmw/rmw.h"
-
 #include "rmw_stats_shim/rolling_mean_accumulator.hpp"
 #include "rmw_stats_shim/timer.hpp"
+#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 
 typedef std::chrono::steady_clock MonoClock;
 typedef std::chrono::system_clock SysClock;
@@ -53,11 +41,7 @@ enum class EndpointType
 class EndpointStatistics
 {
 public:
-  EndpointStatistics(
-    EndpointType stat_type,
-    const char * topic_name,
-    const rmw_node_t * node,
-    size_t window_size);
+  EndpointStatistics(EndpointType stat_type, const char * topic_name, const rmw_node_t * node, size_t window_size);
   virtual ~EndpointStatistics() = default;
 
   void onMessage(MonoTime ts);
@@ -91,10 +75,7 @@ protected:
 class StatPublisher
 {
 public:
-  StatPublisher(
-    rcpputils::SharedLibrary * rmw_impl,
-    rmw_node_t * node,
-    std::string & stats_topic_name);
+  StatPublisher(rcpputils::SharedLibrary * rmw_impl, rmw_node_t * node, std::string & stats_topic_name);
   virtual ~StatPublisher();
   void publish(rosgraph_monitor_msgs::msg::TopicStatistics & msg) const;
 
@@ -137,9 +118,7 @@ public:
   void onPublish(const rmw_publisher_t * publisher);
   void addSubscription(rmw_subscription_t * subscription, const rmw_node_t * node);
   void removeSubscription(rmw_subscription_t * subscription);
-  void onReceive(
-    const rmw_subscription_t * subscription,
-    rmw_message_info_t * message_info = nullptr);
+  void onReceive(const rmw_subscription_t * subscription, rmw_message_info_t * message_info = nullptr);
   void publishStatistics();
 
 private:

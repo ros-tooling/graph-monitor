@@ -1,6 +1,6 @@
 ---
 name: Build and test
-"on":
+on:
   pull_request:
   push:
     branches:
@@ -29,7 +29,7 @@ jobs:
     env:
       # NOTE(emersonknapp) - not setting ROS_DISTRO value because the buildfarm binary jobs don't have it set!
       RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
-      DISABLE_GROUPS_WORKAROUND: "1"
+      DISABLE_GROUPS_WORKAROUND: '1'
     steps:
       - uses: actions/checkout@v4
       - name: Create dependency repos file

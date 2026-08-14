@@ -1,59 +1,33 @@
 ---
-# See https://pre-commit.com for more information on these settings
+# Run hooks only at the pre-commit stage by default.
+# The dco-sign-off hook (prepare-commit-msg) otherwise makes all the checks run twice.
+default_stages: [pre-commit]
+
 repos:
-  # Generally useful checks provided by pre-commit
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: check-added-large-files
-      - id: check-ast
-      - id: check-case-conflict
-      - id: check-merge-conflict
-      - id: check-shebang-scripts-are-executable
-      - id: check-symlinks
-      - id: check-toml
-      - id: check-xml
-      - id: end-of-file-fixer
-      - id: forbid-submodules
-      - id: mixed-line-ending
-      - id: trailing-whitespace
-  # JSON (This one supports comments, vs the one in pre-commit-hooks repo does not)
-  - repo: https://gitlab.com/bmares/check-json5
+  - repo: https://github.com/nineyards-robotics/dco-sign-off
     rev: v1.0.0
     hooks:
-      - id: check-json5
-  # C++ linting
-  - repo: https://github.com/cpplint/cpplint
-    rev: 2.0.0
+      - id: dco-sign-off
+
+  - repo: https://github.com/polymathrobotics/polymath_code_standard
+    rev: v2.4.0
     hooks:
-      - id: cpplint
-        args: ["--config=.cpplint.cfg", --quiet, --output=sed]
-  # Markdown
-  - repo: https://github.com/jackdewinter/pymarkdown
-    rev: v0.9.28
-    hooks:
-      - id: pymarkdown
-        args: [-d, MD013, fix]
-  # XML
-  - repo: https://github.com/emersonknapp/ament_xmllint
-    rev: v0.1
-    hooks:
-      - id: ament_xmllint
-  # YAML
-  - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.29.0
-    hooks:
-      - id: yamllint
-        args: [-d, "{extends: default, rules: {line-length: {max: 120}}}"]
-  # CMake
-  - repo: https://github.com/cmake-lint/cmake-lint
-    rev: 1.4.3
-    hooks:
-      - id: cmakelint
-        args: [--linelength=140]
-  # Bash / Shell scripts
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0.1
-    hooks:
-      - id: shellcheck
-        args: [-e, SC1091]
+      # Basic checks and fixes that apply to any text file and the git repository itself
+      - id: polymath-general
+
+      # Enforce and insert copyright headers in source code for the project's license
+      - id: polymath-copyright
+        args: [--license, Apache-2.0, --wildcard-copyright-org, --reuse-style]
+
+      # Languages
+      - id: polymath-cpp
+      - id: polymath-python
+      - id: polymath-shell
+      - id: polymath-cmake
+
+      # Markdown/up languages
+      - id: polymath-markdown
+      - id: polymath-xml
+      - id: polymath-yaml
+        # rosdoc2.yaml uses a mandated two-document layout that yamlfix rejects.
+        exclude: (^|/)rosdoc2\.yaml$

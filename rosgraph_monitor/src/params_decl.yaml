@@ -4,7 +4,7 @@ rosgraph_monitor:
     type: int
     default_value: 1000
     read_only: true
-    description: "Period in milliseconds between each publishing of the graph diagnostics."
+    description: Period in milliseconds between each publishing of the graph diagnostics.
   graph_monitor:
     diagnostic_namespace:
       type: string

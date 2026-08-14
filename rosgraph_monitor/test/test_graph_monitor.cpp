@@ -1,18 +1,8 @@
-// Copyright 2024, Bonsai Robotics, Inc - All Rights Reserved
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
+// SPDX-License-Identifier: Apache-2.0
 
 #include <condition_variable>
+#include <deque>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -21,34 +11,27 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <deque>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gmock/gmock.h"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
-
 #include "rosgraph_monitor/monitor.hpp"
 
-using testing::SizeIs;
 using testing::Return;
-
+using testing::SizeIs;
 
 class MockGraph : public rclcpp::node_interfaces::NodeGraphInterface
 {
 public:
   // Have to do wrapper function to implement optional parameter
-  std::map<std::string, std::vector<std::string>>
-  get_topic_names_and_types(
-    bool no_demangle = false) const override
+  std::map<std::string, std::vector<std::string>> get_topic_names_and_types(bool no_demangle = false) const override
   {
     return get_topic_names_and_types_mock_(no_demangle);
   }
+
   MOCK_METHOD(
-    (std::map<std::string, std::vector<std::string>>),
-    get_topic_names_and_types_mock_, (bool no_demangle), (const));
-  MOCK_METHOD(
-    (std::map<std::string, std::vector<std::string>>),
-    get_service_names_and_types, (), (const, override));
+    (std::map<std::string, std::vector<std::string>>), get_topic_names_and_types_mock_, (bool no_demangle), (const));
+  MOCK_METHOD((std::map<std::string, std::vector<std::string>>), get_service_names_and_types, (), (const, override));
   MOCK_METHOD(
     (std::map<std::string, std::vector<std::string>>),
     get_service_names_and_types_by_node,
@@ -72,19 +55,19 @@ public:
   MOCK_METHOD((std::vector<std::string>), get_node_names, (), (const, override));
   MOCK_METHOD(
     (std::vector<std::tuple<std::string, std::string, std::string>>),
-    get_node_names_with_enclaves, (), (const, override));
-  MOCK_METHOD(
-    (std::vector<std::pair<std::string, std::string>>),
-    get_node_names_and_namespaces, (), (const, override));
+    get_node_names_with_enclaves,
+    (),
+    (const, override));
+  MOCK_METHOD((std::vector<std::pair<std::string, std::string>>), get_node_names_and_namespaces, (), (const, override));
   MOCK_METHOD(size_t, count_publishers, (const std::string &), (const, override));
   MOCK_METHOD(size_t, count_subscribers, (const std::string &), (const, override));
   MOCK_METHOD(const rcl_guard_condition_t *, get_graph_guard_condition, (), (const, override));
-  #ifndef ROS2_HUMBLE
+#ifndef ROS2_HUMBLE
   MOCK_METHOD(size_t, count_clients, (const std::string &), (const, override));
   MOCK_METHOD(size_t, count_services, (const std::string &), (const, override));
-  #endif
+#endif
 
-  #if !defined(ROS2_HUMBLE) && !defined(ROS2_JAZZY) && !defined(ROS2_KILTED)
+#if !defined(ROS2_HUMBLE) && !defined(ROS2_JAZZY) && !defined(ROS2_KILTED)
   MOCK_METHOD(
     (std::vector<rclcpp::ServiceEndpointInfo>),
     get_clients_info_by_service,
@@ -95,10 +78,9 @@ public:
     get_servers_info_by_service,
     (const std::string &, bool),
     (const, override));
-  #endif
+#endif
 
-  void
-  notify_graph_change() override
+  void notify_graph_change() override
   {
     {
       std::lock_guard<std::mutex> lock(mu_);
@@ -109,14 +91,12 @@ public:
     cv_.notify_all();
   }
 
-  void
-  notify_shutdown() override
+  void notify_shutdown() override
   {
     cv_.notify_all();
   }
 
-  rclcpp::Event::SharedPtr
-  get_graph_event() override
+  rclcpp::Event::SharedPtr get_graph_event() override
   {
     std::lock_guard<std::mutex> lock(mu_);
     auto event = std::make_shared<rclcpp::Event>();
@@ -124,14 +104,9 @@ public:
     return event;
   }
 
-  void
-  wait_for_graph_change(
-    rclcpp::Event::SharedPtr event,
-    std::chrono::nanoseconds timeout) override
+  void wait_for_graph_change(rclcpp::Event::SharedPtr event, std::chrono::nanoseconds timeout) override
   {
-    auto pred = [&event]() {
-        return event->check();
-      };
+    auto pred = [&event]() { return event->check(); };
     std::unique_lock<std::mutex> graph_lock(mu_);
     if (!pred()) {
       cv_.wait_for(graph_lock, timeout, pred);
@@ -172,8 +147,11 @@ struct MockedNode
 {
   std::string name;
   std::vector<std::string> params;
+
   explicit MockedNode(const std::string & name, const std::vector<std::string> & params = {})
-  : name(name), params(params) {}
+  : name(name)
+  , params(params)
+  {}
 };
 
 struct Endpoint
@@ -188,7 +166,7 @@ struct Endpoint
     const std::string & node_name,
     const rclcpp::QoS & qos)
   : topic_name(topic_name)
-    , info(blank_info())
+  , info(blank_info())
   {
     static RosRmwGid next_gid{0};
     info.node_name() = node_name;
@@ -202,7 +180,6 @@ struct Endpoint
   }
 };
 
-
 class GraphMonitorTest : public testing::Test
 {
 protected:
@@ -213,70 +190,53 @@ protected:
     node_graph_ = std::make_shared<testing::StrictMock<MockGraph>>();
 
     // Set up default empty graph state, to be overridden
-    EXPECT_CALL(*node_graph_, get_node_names)
-    .WillRepeatedly(
-      [this]() {
-        std::vector<std::string> node_names;
-        for (const auto & node : mocked_nodes_) {
-          node_names.push_back(node.name);
+    EXPECT_CALL(*node_graph_, get_node_names).WillRepeatedly([this]() {
+      std::vector<std::string> node_names;
+      for (const auto & node : mocked_nodes_) {
+        node_names.push_back(node.name);
+      }
+      return node_names;
+    });
+    EXPECT_CALL(*node_graph_, get_topic_names_and_types_mock_).WillRepeatedly([this](bool) {
+      std::map<std::string, std::vector<std::string>> out;
+      for (const auto & [git, endpoint] : endpoints_) {
+        out[endpoint.topic_name].push_back(endpoint.info.topic_type());
+      }
+      return out;
+    });
+    EXPECT_CALL(*node_graph_, count_publishers).WillRepeatedly([this](const std::string & topic_name) {
+      size_t count = 0;
+      for (const auto & [gid, endpoint] : endpoints_) {
+        if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Publisher && endpoint.topic_name == topic_name) {
+          count++;
         }
-        return node_names;
-      });
-    EXPECT_CALL(*node_graph_, get_topic_names_and_types_mock_)
-    .WillRepeatedly(
-      [this](bool) {
-        std::map<std::string, std::vector<std::string>> out;
-        for (const auto & [git, endpoint] : endpoints_) {
-          out[endpoint.topic_name].push_back(endpoint.info.topic_type());
+      }
+      return count;
+    });
+    EXPECT_CALL(*node_graph_, count_subscribers).WillRepeatedly([this](const std::string & topic_name) {
+      size_t count = 0;
+      for (const auto & [gid, endpoint] : endpoints_) {
+        if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Subscription && endpoint.topic_name == topic_name) {
+          count++;
         }
-        return out;
-      });
-    EXPECT_CALL(*node_graph_, count_publishers)
-    .WillRepeatedly(
-      [this](const std::string & topic_name) {
-        size_t count = 0;
-        for (const auto & [gid, endpoint] : endpoints_) {
-          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Publisher &&
-          endpoint.topic_name == topic_name)
-          {
-            count++;
-          }
-        }
-        return count;
-      });
-    EXPECT_CALL(*node_graph_, count_subscribers)
-    .WillRepeatedly(
-      [this](const std::string & topic_name) {
-        size_t count = 0;
-        for (const auto & [gid, endpoint] : endpoints_) {
-          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Subscription &&
-          endpoint.topic_name == topic_name)
-          {
-            count++;
-          }
-        }
-        return count;
-      });
+      }
+      return count;
+    });
     EXPECT_CALL(*node_graph_, get_publishers_info_by_topic)
-    .WillRepeatedly(
-      [this](const std::string & topic_name, bool = false) {
+      .WillRepeatedly([this](const std::string & topic_name, bool = false) {
         std::vector<rclcpp::TopicEndpointInfo> out;
         for (const auto & [gid, endpoint] : endpoints_) {
-          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Publisher &&
-          endpoint.topic_name == topic_name)
-          {
+          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Publisher && endpoint.topic_name == topic_name) {
             out.emplace_back(endpoint.info);
           }
         }
         return out;
       });
     EXPECT_CALL(*node_graph_, get_subscriptions_info_by_topic)
-    .WillRepeatedly(
-      [this](const std::string & topic_name, bool = false) {
+      .WillRepeatedly([this](const std::string & topic_name, bool = false) {
         std::vector<rclcpp::TopicEndpointInfo> out;
         for (const auto & [gid, endpoint] : endpoints_) {
-          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Subscription &&
-          endpoint.topic_name == topic_name)
+          if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Subscription && endpoint.topic_name == topic_name)
           {
             out.emplace_back(endpoint.info);
           }
@@ -286,34 +246,32 @@ protected:
 
     auto logger = logger_.get_child("graphmon");
 
-
     graphmon_.emplace(
       node_graph_,
-      [this]() {return now_;}, logger, [this](const std::string & node_name,
-      std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
-        return std::async(
-          std::launch::async, [this, node_name, callback]() {
-            std::vector<std::string> param_names;
-            for (const auto & node : mocked_nodes_) {
-              if (node.name == node_name) {
-                for (const auto & param : node.params) {
-                  param_names.push_back(param);
-                }
+      [this]() { return now_; },
+      logger,
+      [this](const std::string & node_name, std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
+        return std::async(std::launch::async, [this, node_name, callback]() {
+          std::vector<std::string> param_names;
+          for (const auto & node : mocked_nodes_) {
+            if (node.name == node_name) {
+              for (const auto & param : node.params) {
+                param_names.push_back(param);
               }
             }
+          }
 
-            rcl_interfaces::msg::ListParametersResult result{};
-            result.names = param_names;
-            callback(result);
-          });
+          rcl_interfaces::msg::ListParametersResult result{};
+          result.names = param_names;
+          callback(result);
+        });
       });
 
-    graphmon_->set_graph_change_callback(
-      [this](rosgraph_monitor_msgs::msg::Graph & msg) {
-        std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
-        queue_.push_back(msg);
-        graphmon_msg_cv_.notify_one();
-      });
+    graphmon_->set_graph_change_callback([this](rosgraph_monitor_msgs::msg::Graph & msg) {
+      std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
+      queue_.push_back(msg);
+      graphmon_msg_cv_.notify_one();
+    });
   }
 
   void trigger_and_wait()
@@ -325,16 +283,13 @@ protected:
   rosgraph_monitor_msgs::msg::Graph await_graphmon_msg()
   {
     std::unique_lock<std::mutex> lock(graphmon_msg_mutex_);
-    graphmon_msg_cv_.wait_for(
-      lock, std::chrono::milliseconds(100), [this]() {
-        return !queue_.empty();
-      });
+    graphmon_msg_cv_.wait_for(lock, std::chrono::milliseconds(100), [this]() { return !queue_.empty(); });
     rosgraph_monitor_msgs::msg::Graph msg = queue_.front();
     queue_.pop_front();
     return msg;
   }
 
-  template<typename Predicate>
+  template <typename Predicate>
   rosgraph_monitor_msgs::msg::Graph await_graphmon_msg_until(
     Predicate condition,
     std::chrono::milliseconds timeout = std::chrono::milliseconds(1000),
@@ -357,7 +312,6 @@ protected:
       }
     }
   }
-
 
   void set_node_names(std::vector<std::string> node_names)
   {
@@ -392,13 +346,12 @@ protected:
     const std::optional<std::string> & node_name = std::nullopt,
     const std::optional<rclcpp::QoS> & qos = std::nullopt)
   {
-    return add_endpoint(
-      Endpoint(
-        rclcpp::EndpointType::Publisher,
-        topic_name,
-        topic_type,
-        node_name.value_or(default_node_name_),
-        qos.value_or(default_qos_)));
+    return add_endpoint(Endpoint(
+      rclcpp::EndpointType::Publisher,
+      topic_name,
+      topic_type,
+      node_name.value_or(default_node_name_),
+      qos.value_or(default_qos_)));
   }
 
   Endpoint add_sub(
@@ -407,13 +360,12 @@ protected:
     const std::optional<std::string> & node_name = std::nullopt,
     const std::optional<rclcpp::QoS> & qos = std::nullopt)
   {
-    return add_endpoint(
-      Endpoint(
-        rclcpp::EndpointType::Subscription,
-        topic_name,
-        topic_type,
-        node_name.value_or(default_node_name_),
-        qos.value_or(default_qos_)));
+    return add_endpoint(Endpoint(
+      rclcpp::EndpointType::Subscription,
+      topic_name,
+      topic_type,
+      node_name.value_or(default_node_name_),
+      qos.value_or(default_qos_)));
   }
 
   void remove_endpoint(const Endpoint & endpoint)
@@ -452,29 +404,23 @@ protected:
   /// @param level Expected level that diagnostic should be at
   /// @param maybe_message_pattern Optional string used to make a regex match against the message
   ///   if nullopt, message is not checked
-  void
-  check_status(
+  void check_status(
     const std::string & diagnostic_name,
     const uint8_t level,
     std::optional<std::string> maybe_message_pattern = std::nullopt)
   {
     diagnostic_msgs::msg::DiagnosticArray msg;
     graphmon_->evaluate(msg.status);
-    auto it =
-      std::find_if(
-      msg.status.begin(), msg.status.end(), [&diagnostic_name](const auto & status) {
-        return status.name == diagnostic_name;
-      });
+    auto it = std::find_if(msg.status.begin(), msg.status.end(), [&diagnostic_name](const auto & status) {
+      return status.name == diagnostic_name;
+    });
     ASSERT_NE(it, msg.status.end()) << "Expected diagnostic " << diagnostic_name << " not present";
 
     EXPECT_EQ(it->level, level);
     if (maybe_message_pattern) {
       std::regex message_re{*maybe_message_pattern};
-      EXPECT_TRUE(
-        std::regex_search(
-          it->message,
-          message_re)) << "Message '" << it->message << "' does not match regex R'" <<
-        *maybe_message_pattern << "'";
+      EXPECT_TRUE(std::regex_search(it->message, message_re))
+        << "Message '" << it->message << "' does not match regex R'" << *maybe_message_pattern << "'";
     }
   }
 
@@ -488,7 +434,6 @@ protected:
   std::condition_variable graphmon_msg_cv_;
   std::deque<rosgraph_monitor_msgs::msg::Graph> queue_;
 
-
   const std::string default_node_name_ = "testy0";
   const std::string default_topic_name_ = "/topic1";
   const rclcpp::QoS default_qos_{10};
@@ -496,7 +441,11 @@ protected:
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
 
-#define CHECK_STATUS(message, ...) {SCOPED_TRACE(message); check_status(__VA_ARGS__);}
+#define CHECK_STATUS(message, ...) \
+  {                                \
+    SCOPED_TRACE(message);         \
+    check_status(__VA_ARGS__);     \
+  }
 
 TEST_F(GraphMonitorTest, node_liveness)
 {
@@ -643,18 +592,13 @@ TEST_F(GraphMonitorTest, endpoint_continuity_ignore_topic_names)
 TEST_F(GraphMonitorTest, topic_frequency_no_deadline_dont_care)
 {
   set_node_names({default_node_name_});
-  rclcpp::QoS cyclone_received_qos = rclcpp::QoS{10}.deadline(
-    rclcpp::Duration::from_rmw_time(RMW_DURATION_INFINITE));
+  rclcpp::QoS cyclone_received_qos = rclcpp::QoS{10}.deadline(rclcpp::Duration::from_rmw_time(RMW_DURATION_INFINITE));
   add_pub("/topic1", "type1");
   add_sub("/topic1", "type1", default_node_name_, cyclone_received_qos);
   trigger_and_wait();
   now_ = rclcpp::Time(5, 0, RCL_ROS_TIME);
-  CHECK_STATUS(
-    "Publisher with no deadline reports no frequency diagnostic", pub_freq_diagnostic,
-    OK);
-  CHECK_STATUS(
-    "Subscription to no deadline reports no frequency diagnostic", sub_freq_diagnostic,
-    OK);
+  CHECK_STATUS("Publisher with no deadline reports no frequency diagnostic", pub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription to no deadline reports no frequency diagnostic", sub_freq_diagnostic, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_happy)
@@ -669,11 +613,9 @@ TEST_F(GraphMonitorTest, topic_frequency_happy)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(9)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(9)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(11)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(11)));
   graphmon_->on_topic_statistics(stats);
   CHECK_STATUS("Publisher with good topic stats", pub_freq_diagnostic, OK);
   CHECK_STATUS("Subscription with good topic stats", sub_freq_diagnostic, OK);
@@ -691,11 +633,9 @@ TEST_F(GraphMonitorTest, topic_frequency_slow)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(12)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(12)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(15)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(15)));
   graphmon_->on_topic_statistics(stats);
   CHECK_STATUS("Publisher sending too slow", pub_freq_diagnostic, WARN);
   CHECK_STATUS("Subscription receiving from too slow pub", sub_freq_diagnostic, WARN);
@@ -713,11 +653,9 @@ TEST_F(GraphMonitorTest, topic_frequency_fast)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(8)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(8)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(8)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(8)));
   graphmon_->on_topic_statistics(stats);
   CHECK_STATUS("Publisher sending fast is fine", pub_freq_diagnostic, OK);
   CHECK_STATUS("Subscription receiving fast is fine", sub_freq_diagnostic, OK);
@@ -735,11 +673,9 @@ TEST_F(GraphMonitorTest, topic_frequency_tx_good_rx_bad)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(10)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(10)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(20)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(20)));
   graphmon_->on_topic_statistics(stats);
   CHECK_STATUS("Publisher sending fine", pub_freq_diagnostic, OK);
   CHECK_STATUS("But the subscription is receiving too slowly", sub_freq_diagnostic, WARN);
@@ -757,17 +693,13 @@ TEST_F(GraphMonitorTest, topic_frequency_tx_bad_rx_good)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(7)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(7)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
   graphmon_->on_topic_statistics(stats);
 
   CHECK_STATUS("Publisher sending faster than deadline is OK", pub_freq_diagnostic, OK);
-  CHECK_STATUS(
-    "Subscription receiving slower than sent, but still within deadline",
-    sub_freq_diagnostic, OK);
+  CHECK_STATUS("Subscription receiving slower than sent, but still within deadline", sub_freq_diagnostic, OK);
 }
 
 TEST_F(GraphMonitorTest, topic_frequency_not_received)
@@ -801,11 +733,9 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
   rosgraph_monitor_msgs::msg::TopicStatistics stats;
   stats.timestamp = rclcpp::Time(1, 0);
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(10)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::PUBLISHED_PERIOD, std::chrono::milliseconds(10)));
   stats.statistics.push_back(
-    make_stat(
-      rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
+    make_stat(rosgraph_monitor_msgs::msg::TopicStatistic::RECEIVED_PERIOD, std::chrono::milliseconds(10)));
   graphmon_->on_topic_statistics(stats);
   CHECK_STATUS("Publisher stats fine", pub_freq_diagnostic, OK);
   CHECK_STATUS("Subscription stats fine", sub_freq_diagnostic, OK);
@@ -829,7 +759,8 @@ TEST_F(GraphMonitorTest, topic_frequency_stale)
   CHECK_STATUS("Subscription removed and replaced, not stale", sub_freq_diagnostic, OK);
 }
 
-TEST_F(GraphMonitorTest, rosgraph_generation) {
+TEST_F(GraphMonitorTest, rosgraph_generation)
+{
   // Set up test nodes
   set_node_names({"node1", "node2", "node3"});
   // Generate rosgraph message
@@ -844,15 +775,14 @@ TEST_F(GraphMonitorTest, rosgraph_generation) {
     node_names.push_back(node.name);
   }
 
-  EXPECT_THAT(
-    node_names,
-    testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
+  EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2", "/node3"));
 
   // Verify timestamp is set (should be current time in test environment)
   EXPECT_EQ(rosgraph_msg.timestamp, now_);
 }
 
-TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
+TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes)
+{
   // Set up some nodes, including one that should be ignored
   graphmon_->config().nodes.ignore_prefixes = {"/dummy"};
   set_node_names({"node1", "node2", "dummy/ignored_node"});
@@ -862,8 +792,7 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
       return msg.nodes.size() == 2;  // We expect only 2 nodes after ignoring
     },
     std::chrono::milliseconds(500),
-    "Timed out waiting for ignored nodes to be filtered"
-  );
+    "Timed out waiting for ignored nodes to be filtered");
 
   // Verify the message contains only non-ignored nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 2);
@@ -877,7 +806,8 @@ TEST_F(GraphMonitorTest, rosgraph_ignores_ignored_nodes) {
   EXPECT_THAT(node_names, testing::UnorderedElementsAre("/node1", "/node2"));
 }
 
-TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
+TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
+{
   // Set up some nodes, including one that should be warn-only
   std::vector<MockedNode> mocked_nodes{
     MockedNode("/node1", {"param1", "param2"}),
@@ -893,8 +823,7 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node) {
       return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
     },
     std::chrono::milliseconds(500),
-    "Timed out waiting for parameters to be populated"
-  );
+    "Timed out waiting for parameters to be populated");
 
   // Verify the message contains the expected node and parameters
   EXPECT_EQ(rosgraph_msg.nodes.size(), 1);

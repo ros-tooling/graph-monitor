@@ -11,6 +11,7 @@ from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
 from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile
 from rosgraph_msgs.msg import Graph
 from rosgraph_msgs.msg import QoSProfile as QosProfileMsg
@@ -66,7 +67,16 @@ class TestProcessOutput(unittest.TestCase):
         if node_name is None:
             node_name = create_random_node_name()
 
-        new_node = rclpy.create_node(node_name)
+        # rclpy's TypeDescriptionService holds a reference to the node handle that destroy_node()
+        # does not release, so a destroyed node lingers in the graph until its process exits.
+        # Disabling the service lets tests observe node removal.
+        # Regression introduced in Lyrical+ in https://github.com/ros2/rclpy/pull/1629
+        new_node = rclpy.create_node(
+            node_name,
+            parameter_overrides=[
+                Parameter('start_type_description_service', Parameter.Type.BOOL, False),
+            ],
+        )
         if parameters is not None:
             for param_name, param_value in parameters.items():
                 new_node.declare_parameter(param_name, param_value)

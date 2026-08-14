@@ -89,8 +89,18 @@ jobs:
           report_paths: ros_ws/.ci/test-results/**/test_results/**/*.xml
           detailed_summary: true
           include_passed: false
-          # Post a summary of failed tests as a PR comment,
-          # updating the existing per-distro comment in place on re-runs
-          # (no-op on push, where there's no associated PR).
-          comment: true
-          updateComment: true
+          # Annotate this job rather than creating a separate check run, so failures show up
+          # in this job's own view. The PR comment is posted once by the aggregate job below.
+          annotate_only: true
+
+  pr_number:
+    name: Record PR number
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save PR number
+        run: echo "${{ github.event.number }}" > pr_number.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-number
+          path: pr_number.txt

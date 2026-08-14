@@ -1,0 +1,72 @@
+---
+# Posts test result comments for the "Build and test" workflow.
+#
+# This is a separate workflow triggered by workflow_run, rather than a job in that workflow,
+# because a pull_request run from a fork gets a read-only GITHUB_TOKEN and cannot comment.
+# A workflow_run run happens in the context of the base repository, so it has a writable token.
+# Nothing here checks out or executes PR code, which is what makes that safe.
+name: Test report
+on:
+  workflow_run:
+    workflows: [Build and test]
+    types: [completed]
+
+permissions:
+  contents: read
+  # Read artifacts from the run that triggered this one
+  actions: read
+  # Create the per-distro check run
+  checks: write
+  # Post and update the per-distro comment
+  pull-requests: write
+
+jobs:
+  report:
+    # Pushes to main have no PR to comment on.
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    name: ${{ matrix.ros }} test results
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # One report per distro, so a failure on lyrical is distinguishable from one on jazzy.
+      # Keep in sync with the ros matrix in build.yml.
+      matrix:
+        ros: [humble, jazzy, kilted, lyrical, rolling]
+    steps:
+      - name: Download test results for ${{ matrix.ros }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-${{ matrix.ros }}-*
+          path: test-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Download PR number
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-number
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Read PR number
+        id: pr
+        shell: bash
+        run: echo "number=$(cat pr/pr_number.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Test report
+        uses: mikepenz/action-junit-report@v5
+        with:
+          # One check_name per distro means one comment per distro, updated in place on re-runs.
+          check_name: '[${{ matrix.ros }}] Test Results'
+          report_paths: test-results/**/*.xml
+          detailed_summary: true
+          include_passed: false
+          # Nothing is checked out here, so annotations would point at files that are not present.
+          # The build jobs annotate themselves directly via annotate_only.
+          check_annotations: false
+          # workflow_run does not carry the PR for fork runs, so both are passed explicitly.
+          commit: ${{ github.event.workflow_run.head_sha }}
+          pr_id: ${{ steps.pr.outputs.number }}
+          comment: true
+          updateComment: true

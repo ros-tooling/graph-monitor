@@ -93,6 +93,109 @@ jobs:
           # in this job's own view. The PR comment is posted once by the aggregate job below.
           annotate_only: true
 
+  thread_sanitizer:
+    name: rolling - thread sanitizer
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-resolute-testing:latest
+    env:
+      RMW_IMPLEMENTATION_WRAPPER: rmw_stats_shim
+      DISABLE_GROUPS_WORKAROUND: '1'
+      # Collect every report instead of aborting on the first, and write them where the step
+      # below can find them. exitcode=0 keeps a race from failing the test binary directly,
+      # so that this job decides what to do with the findings rather than ctest.
+      TSAN_OPTIONS: halt_on_error=0 exitcode=0 log_path=/tmp/tsan/report
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create dependency repos file
+        shell: bash
+        run: |
+          mkdir -p /tmp/tsan
+          cat << 'EOF' > /tmp/deps.repos
+          {"repositories":
+            {"rmw_implementation":
+              {"type": "git",
+              "url": "https://github.com/ros-tooling/rmw_implementation",
+              "version": "rolling-rmw-wrapper"
+              }
+            }
+          }
+          EOF
+
+      # Rolling carries the most code, since older distros compile parts out behind ifdefs.
+      - uses: ros-tooling/action-ros-ci@v0.4
+        with:
+          target-ros2-distro: rolling
+          vcs-repo-file-url: /tmp/deps.repos
+          package-name: rosgraph_monitor
+          colcon-defaults: |
+            {
+              "build": {
+                "cmake-args": [
+                  "-DCMAKE_BUILD_TYPE=Debug",
+                  "-DCMAKE_CXX_FLAGS=-fsanitize=thread -g -O1",
+                  "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread",
+                  "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=thread"
+                ]
+              }
+            }
+
+      - name: Report data races
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          reports=(/tmp/tsan/report.*)
+          if [[ ${#reports[@]} -eq 0 ]]; then
+            echo "No ThreadSanitizer reports produced." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # A report names the file it blames in its SUMMARY line. Only races in the code this
+          # job builds are actionable: rclcpp, the RMW and the DDS layer are not instrumented,
+          # so findings attributed to them are reported but do not fail the job. Matching the
+          # package directory rather than the workspace root keeps dependencies that
+          # action-ros-ci checks out alongside us (rmw_implementation) out of the count.
+          grep -h '^SUMMARY: ThreadSanitizer' "${reports[@]}" | sort -u > /tmp/tsan/summaries.txt || true
+          grep -E '/rosgraph_monitor/(src|include|test)/' /tmp/tsan/summaries.txt > /tmp/tsan/ours.txt || true
+
+          total=$(wc -l < /tmp/tsan/summaries.txt)
+          ours=$(wc -l < /tmp/tsan/ours.txt)
+
+          {
+            echo "## ThreadSanitizer"
+            echo
+            echo "| | count |"
+            echo "|---|---|"
+            echo "| Races in this repository | $ours |"
+            echo "| Races elsewhere (uninstrumented deps) | $((total - ours)) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS= read -r line; do
+            [[ -z $line ]] && continue
+            echo "::error title=ThreadSanitizer data race::${line#SUMMARY: ThreadSanitizer: }"
+          done < /tmp/tsan/ours.txt
+
+          while IFS= read -r line; do
+            [[ -z $line ]] && continue
+            echo "::warning title=ThreadSanitizer (dependency)::${line#SUMMARY: ThreadSanitizer: }"
+          done < <(comm -23 /tmp/tsan/summaries.txt /tmp/tsan/ours.txt)
+
+          if [[ $ours -gt 0 ]]; then
+            echo "Found $ours data race(s) in this repository." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "No data races in this repository." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ThreadSanitizer reports
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: tsan-reports
+          path: /tmp/tsan
+          if-no-files-found: ignore
+
   pr_number:
     name: Record PR number
     if: ${{ github.event_name == 'pull_request' }}

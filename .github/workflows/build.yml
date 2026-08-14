@@ -59,7 +59,9 @@ jobs:
                 ]
               }
             }
+
       - name: Gather test results
+        if: ${{ !cancelled() }}
         shell: bash
         working-directory: ros_ws
         run: |

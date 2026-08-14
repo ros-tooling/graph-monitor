@@ -1,17 +1,17 @@
 ---
-
-name: pre-commit
+name: Lint
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
 
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
+    name: Pre-commit Checks
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-      - run: sudo apt-get update && sudo apt-get install libxml2-utils
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
       - uses: pre-commit/action@v3.0.1

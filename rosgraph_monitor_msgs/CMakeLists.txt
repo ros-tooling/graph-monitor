@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
 # SPDX-License-Identifier: Apache-2.0
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.22)
 project(rosgraph_monitor_msgs)
 
 if(NOT CMAKE_CXX_STANDARD)

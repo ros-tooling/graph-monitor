@@ -1,6 +1,6 @@
 # RMW Stats Shim
 
-Depends on a [modified version of `rmw_implementation`](https://github.com/robograph-project/rmw_implementation) to provide topic statistics calculation within the RMW layer of each node, without having to instrument application code.
+Depends on a [modified version of `rmw_implementation`](https://github.com/ros-tooling/rmw_implementation) to provide topic statistics calculation within the RMW layer of each node, without having to instrument application code.
 
 This component
 * Wraps & intercepts some RMW API calls

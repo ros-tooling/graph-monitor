@@ -8,6 +8,7 @@
 #include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <regex>
 #include <string>
@@ -210,23 +211,30 @@ protected:
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
-  void track_node_updates(const std::vector<std::string> & observed_node_names);
+  /// @return Names of newly discovered nodes, whose parameters the caller should query
+  /// @note Caller must hold tracking_mutex_
+  std::vector<std::string> track_node_updates(const std::vector<std::string> & observed_node_names);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_topics_and_types
+  /// @note Caller must hold tracking_mutex_
   void track_endpoint_updates(const TopicsToTypes & observed_topics_and_types);
 
+  /// @note Caller must hold tracking_mutex_
   /// @return Iterator to existing or added publisher, or nullopt if node ignored
   std::optional<EndpointTrackingMap::iterator> add_publisher(
     const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
 
+  /// @note Caller must hold tracking_mutex_
   /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
   std::optional<RosRmwGid> lookup_publisher(const std::string & node_name, const std::string & topic_name) const;
 
+  /// @note Caller must hold tracking_mutex_
   /// @return Iterator to existing or added publisher, or nullopt if node ignored
   std::optional<EndpointTrackingMap::iterator> add_subscription(
     const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
 
+  /// @note Caller must hold tracking_mutex_
   /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
   std::optional<RosRmwGid> lookup_subscription(const std::string & node_name, const std::string & topic_name) const;
 
@@ -241,7 +249,13 @@ protected:
 
   /// @brief Query parameters for a newly discovered node
   /// @param node_name The name of the node to query parameters for
+  /// @note Must be called without tracking_mutex_ held. Replacing a node's future joins the
+  ///   previous query's thread, and the query's callback takes the mutex itself.
   void query_node_parameters(const std::string & node_name);
+
+  /// @brief Invoke the graph change callback, if one is set.
+  /// @note Must be called without tracking_mutex_ held; the callback reads the tracked state.
+  void notify_graph_change();
 
   /* Members */
 
@@ -258,6 +272,12 @@ protected:
   Event update_event_;
   std::function<void()> graph_change_callback_;
 
+  /// Guards everything below, which three threads reach: the watch thread rebuilding the graph,
+  /// each parameter query's thread writing back its result, and the caller's thread reading it
+  /// out via evaluate() or fill_rosgraph_msg(). Never held while invoking
+  /// graph_change_callback_, which reads the same state.
+  mutable std::mutex tracking_mutex_;
+
   QueryParams query_params_;
 
   // Graph cache
@@ -273,6 +293,8 @@ protected:
   std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
   std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
   std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
+  /// Owned solely by the watch thread, and by the destructor once that thread has joined,
+  /// so it is deliberately outside tracking_mutex_: dropping a future here joins its thread.
   std::unordered_map<std::string, std::shared_future<void>> params_futures;
 };
 

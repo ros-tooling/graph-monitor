@@ -144,49 +144,7 @@ jobs:
       - name: Report data races
         if: ${{ !cancelled() }}
         shell: bash
-        run: |
-          shopt -s nullglob
-          reports=(/tmp/tsan/report.*)
-          if [[ ${#reports[@]} -eq 0 ]]; then
-            echo "No ThreadSanitizer reports produced." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          # A report names the file it blames in its SUMMARY line. Only races in the code this
-          # job builds are actionable: rclcpp, the RMW and the DDS layer are not instrumented,
-          # so findings attributed to them are reported but do not fail the job. Matching the
-          # package directory rather than the workspace root keeps dependencies that
-          # action-ros-ci checks out alongside us (rmw_implementation) out of the count.
-          grep -h '^SUMMARY: ThreadSanitizer' "${reports[@]}" | sort -u > /tmp/tsan/summaries.txt || true
-          grep -E '/rosgraph_monitor/(src|include|test)/' /tmp/tsan/summaries.txt > /tmp/tsan/ours.txt || true
-
-          total=$(wc -l < /tmp/tsan/summaries.txt)
-          ours=$(wc -l < /tmp/tsan/ours.txt)
-
-          {
-            echo "## ThreadSanitizer"
-            echo
-            echo "| | count |"
-            echo "|---|---|"
-            echo "| Races in this repository | $ours |"
-            echo "| Races elsewhere (uninstrumented deps) | $((total - ours)) |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          while IFS= read -r line; do
-            [[ -z $line ]] && continue
-            echo "::error title=ThreadSanitizer data race::${line#SUMMARY: ThreadSanitizer: }"
-          done < /tmp/tsan/ours.txt
-
-          while IFS= read -r line; do
-            [[ -z $line ]] && continue
-            echo "::warning title=ThreadSanitizer (dependency)::${line#SUMMARY: ThreadSanitizer: }"
-          done < <(comm -23 /tmp/tsan/summaries.txt /tmp/tsan/ours.txt)
-
-          if [[ $ours -gt 0 ]]; then
-            echo "Found $ours data race(s) in this repository." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          echo "No data races in this repository." >> "$GITHUB_STEP_SUMMARY"
+        run: python3 .github/scripts/tsan_report.py /tmp/tsan
 
       - name: Upload ThreadSanitizer reports
         uses: actions/upload-artifact@v4

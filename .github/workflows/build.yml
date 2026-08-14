@@ -60,6 +60,7 @@ jobs:
               }
             }
       - name: Gather test results
+        working-directory: ros_ws
         run: |
           TEST_RESULT_DEST=.ci/test-results
           mkdir -p "$TEST_RESULT_DEST"
@@ -75,14 +76,14 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: test-results-${{ matrix.ros }}-${{ matrix.package }}
-          path: .ci/test-results
+          path: ros_ws/.ci/test-results
 
       - name: Test Report
         uses: mikepenz/action-junit-report@v5
         if: ${{ !cancelled() }}
         with:
           check_name: '[${{ matrix.ros }}] ${{ matrix.package }} Test Results'
-          report_paths: .ci/test-results/**/test_results/**/*.xml
+          report_paths: ros_ws/.ci/test-results/**/test_results/**/*.xml
           detailed_summary: true
           include_passed: false
           # Post a summary of failed tests as a PR comment,

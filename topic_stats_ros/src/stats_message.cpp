@@ -2,13 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Polymath Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "rmw_stats_shim/stats_message.hpp"
+#include "topic_stats_ros/stats_message.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <utility>
 
-namespace rmw_stats_shim
+namespace topic_stats_ros
 {
 
 namespace
@@ -96,4 +96,4 @@ rosgraph_monitor_msgs::msg::TopicStatistics to_message(
   return msg;
 }
 
-}  // namespace rmw_stats_shim
+}  // namespace topic_stats_ros

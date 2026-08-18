@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>topic_stats_shm</name>
+  <version>0.0.0</version>
+  <description>
+    Shared memory transport for topic statistics. An instrumented process writes snapshots into its
+    own segment; a separate collector reads every segment on the machine. Has no ROS dependencies,
+    so an instrumented process never links the middleware to report statistics.
+  </description>
+  <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>topic_stats_core</depend>
+
+  <test_depend>ament_cmake_gmock</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

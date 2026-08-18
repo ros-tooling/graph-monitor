@@ -1,20 +1,20 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>rmw_stats_shim</name>
-  <version>0.2.3</version>
-  <description>Partial RMW shim library to instrument RMW API calls</description>
+  <name>topic_stats_collector</name>
+  <version>0.0.0</version>
+  <description>
+    Node that publishes the topic statistics every instrumented process on the machine has written
+    to shared memory. One per machine. Nothing it does affects the processes it reads from.
+  </description>
   <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
   <license>Apache License 2.0</license>
-  <author email="emerson.knapp@bonsairobotics.ai">Emerson Knapp on behalf of Bonsai Robotics</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>rcpputils</depend>
-  <depend>rmw</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
   <depend>rosgraph_monitor_msgs</depend>
-  <depend>rosidl_runtime_cpp</depend>
-  <depend>rosidl_typesupport_cpp</depend>
   <depend>topic_stats_core</depend>
   <depend>topic_stats_ros</depend>
   <depend>topic_stats_shm</depend>
@@ -23,6 +23,5 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <rosdoc2>rosdoc2.yaml</rosdoc2>
   </export>
 </package>

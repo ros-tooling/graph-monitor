@@ -13,7 +13,15 @@ jobs:
       fail-fast: false
       matrix:
         ros: [humble, jazzy, kilted, lyrical, rolling]
-        package: [rmw_stats_shim, rosgraph_monitor, rosgraph_monitor_msgs, rosgraph_monitor_test, topic_stats_core]
+        package:
+          - rmw_stats_shim
+          - rosgraph_monitor
+          - rosgraph_monitor_msgs
+          - rosgraph_monitor_test
+          - topic_stats_collector
+          - topic_stats_core
+          - topic_stats_ros
+          - topic_stats_shm
         include:
           - ros: humble
             ubuntu: jammy
@@ -124,14 +132,15 @@ jobs:
           EOF
 
       # Rolling carries the most code, since older distros compile parts out behind ifdefs.
-      # topic_stats_core is here because its concurrency tests exist specifically to be run under
-      # this sanitizer: they exercise recording against concurrent endpoint registration, slot
-      # recycling underneath live handles, and node teardown that orphans endpoints.
+      # topic_stats_core and topic_stats_shm are here because their concurrency tests exist
+      # specifically to be run under this sanitizer: endpoint registration racing recording, slot
+      # recycling underneath live handles, node teardown that orphans endpoints, and a shared memory
+      # reader draining a ring while the writer laps it.
       - uses: ros-tooling/action-ros-ci@v0.4
         with:
           target-ros2-distro: rolling
           vcs-repo-file-url: /tmp/deps.repos
-          package-name: rosgraph_monitor topic_stats_core
+          package-name: rosgraph_monitor topic_stats_core topic_stats_shm
           colcon-defaults: |
             {
               "build": {

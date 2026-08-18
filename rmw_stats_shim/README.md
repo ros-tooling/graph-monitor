@@ -23,8 +23,9 @@ the RMW-specific half, split along the two boundaries that package defines:
   a `/topic_statistics` publisher created directly against the RMW implementation. Creating and
   destroying those publishers emits graph events that re-enter this shim, so their lifetime is
   managed with no lock of this package held.
-* `stats_message.*` converts a core snapshot into `rosgraph_monitor_msgs`. Kept separate from
-  publishing so it can be tested on its own.
+* `topic_stats_ros` holds the conversion from a core snapshot into `rosgraph_monitor_msgs`. It lives
+  outside this package because the shared memory collector produces the identical messages from the
+  identical snapshots, and only one copy of that should exist.
 
 A second ingest adapter based on the `ros_trace_*` functions that `rcl` and the RMW implementations
 already call is the reason for the split: it can share everything below `Recorder` without needing a
@@ -33,6 +34,21 @@ patched `rmw_implementation`.
 Key points:
 * Requires no subscriptions, no extra copies, to do statistics on all topics
 * Requires no modification to application code to use
+
+## Choosing an egress
+
+Where statistics go is selected per process by environment variable. The statistics core and the
+ingest adapter are identical either way; only the `topic_stats_core::StatsSink` implementation
+differs.
+
+| `ROS_TOPIC_STATISTICS_EGRESS` | What happens | Costs |
+|---|---|---|
+| `rmw_publisher` (default) | A `/topic_statistics` publisher per node, created against the RMW implementation | Publishes from inside the middleware's own call stack, and adds a publisher per node to the graph being measured |
+| `shared_memory` | A segment per process, drained by `topic_stats_collector` | Needs one collector process per machine |
+| `none` | Measure but do not report | Nothing is published; useful for isolating the cost of ingest |
+
+If the selected egress cannot be created, the process logs why and carries on without statistics.
+Instrumentation must never stop a node from starting.
 
 ## Configuration
 
@@ -45,6 +61,11 @@ Set the following environment variables before launching a node to configure top
   * Default: `/topic_statistics`
 * `ROS_TOPIC_STATISTICS_PUBLISH_PERIOD` - Interval in seconds at which to periodically publish stats
   * Default: `1.0`
+* `ROS_TOPIC_STATISTICS_EGRESS` - Where statistics go: `rmw_publisher`, `shared_memory`, or `none`
+  * Default: `rmw_publisher`
+* `ROS_TOPIC_STATISTICS_SHM_CAPACITY` - Ring slots in the shared memory segment, `shared_memory` only.
+  Bounds how far the collector may fall behind before samples are overwritten.
+  * Default: `256`
 
 ## Usage
 

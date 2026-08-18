@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <utility>
 
-#include "rmw_stats_shim/stats_message.hpp"
 #include "rosidl_typesupport_cpp/message_type_support.hpp"
+#include "topic_stats_ros/stats_message.hpp"
 
 #define REINTERP(SYMBOL, LIB) reinterpret_cast<decltype(SYMBOL) *>(LIB->get_symbol(#SYMBOL))
 
@@ -109,7 +109,7 @@ void RmwPublisherSink::clear()
 void RmwPublisherSink::publish(const topic_stats_core::StatsReport & report)
 {
   for (const auto & node_report : report.nodes) {
-    auto msg = to_message(node_report, report.timestamp);
+    auto msg = topic_stats_ros::to_message(node_report, report.timestamp);
     if (msg.statistics.empty()) {
       continue;
     }

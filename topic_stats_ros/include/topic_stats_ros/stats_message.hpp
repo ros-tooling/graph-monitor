@@ -2,15 +2,15 @@
 // SPDX-FileCopyrightText: 2026 Polymath Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef RMW_STATS_SHIM__STATS_MESSAGE_HPP_
-#define RMW_STATS_SHIM__STATS_MESSAGE_HPP_
+#ifndef TOPIC_STATS_ROS__STATS_MESSAGE_HPP_
+#define TOPIC_STATS_ROS__STATS_MESSAGE_HPP_
 
 #include <cstdint>
 
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "topic_stats_core/types.hpp"
 
-namespace rmw_stats_shim
+namespace topic_stats_ros
 {
 
 /// Maps a core statistic onto its TopicStatistic constant.
@@ -28,6 +28,6 @@ bool to_statistic_type(topic_stats_core::StatKind kind, uint8_t & statistic_type
 rosgraph_monitor_msgs::msg::TopicStatistics to_message(
   const topic_stats_core::NodeReport & node_report, topic_stats_core::SysTime timestamp);
 
-}  // namespace rmw_stats_shim
+}  // namespace topic_stats_ros
 
-#endif  // RMW_STATS_SHIM__STATS_MESSAGE_HPP_
+#endif  // TOPIC_STATS_ROS__STATS_MESSAGE_HPP_

@@ -6,16 +6,16 @@
 #include <chrono>
 #include <utility>
 
-#include "rmw_stats_shim/stats_message.hpp"
+#include "topic_stats_ros/stats_message.hpp"
 
-using rmw_stats_shim::to_message;
-using rmw_stats_shim::to_statistic_type;
 using rosgraph_monitor_msgs::msg::TopicStatistic;
 using topic_stats_core::Duration;
 using topic_stats_core::NodeReport;
 using topic_stats_core::StatKind;
 using topic_stats_core::StatSample;
 using topic_stats_core::SysTime;
+using topic_stats_ros::to_message;
+using topic_stats_ros::to_statistic_type;
 
 namespace
 {

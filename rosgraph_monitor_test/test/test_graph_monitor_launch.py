@@ -10,7 +10,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
-from rcl_interfaces.msg import ParameterDescriptor
+from rcl_interfaces.msg import ParameterType
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile
 from rosgraph_msgs.msg import Graph
@@ -196,21 +196,28 @@ class TestProcessOutput(unittest.TestCase):
             if not len(updated_node.parameters) > 0:
                 return False
 
-            def filter_params(param):
-                return param.name != 'use_sim_time' and param.name != 'start_type_description_service'
+            def is_ours(name):
+                return name not in ('use_sim_time', 'start_type_description_service')
 
-            # Assert on the parameters
-            self.assertCountEqual(
-                list(filter(filter_params, updated_node.parameters)),
-                [
-                    ParameterDescriptor(
-                        name='param1',
-                    ),
-                    ParameterDescriptor(
-                        name='param2',
-                    ),
-                ],
-            )
+            # Values are reported alongside the descriptors, one per descriptor, so pair them
+            # up before filtering out the parameters every node has.
+            if len(updated_node.parameter_values) != len(updated_node.parameters):
+                return False
+            observed = {
+                descriptor.name: (descriptor, value)
+                for descriptor, value in zip(updated_node.parameters, updated_node.parameter_values)
+                if is_ours(descriptor.name)
+            }
+            if set(observed) != {'param1', 'param2'}:
+                return False
+
+            # Descriptors carry the real declared type, not a placeholder.
+            self.assertEqual(observed['param1'][0].type, ParameterType.PARAMETER_STRING)
+            self.assertEqual(observed['param2'][0].type, ParameterType.PARAMETER_INTEGER)
+
+            # And the values are the ones the node was declared with.
+            self.assertEqual(observed['param1'][1].string_value, 'value1')
+            self.assertEqual(observed['param2'][1].integer_value, 42)
             return True
 
         success, messages = wait_for_message_sync(

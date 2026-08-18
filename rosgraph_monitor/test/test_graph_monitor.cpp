@@ -7,9 +7,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
@@ -180,6 +182,60 @@ struct Endpoint
   }
 };
 
+/// Answers parameter queries straight from the mocked graph, on the calling thread.
+/// Names come from MockedNode; each reports a descriptor and an integer value, which is enough
+/// to see the monitor thread them into the graph message.
+class MockParameterService : public rosgraph_monitor::ParameterServiceClient
+{
+public:
+  explicit MockParameterService(std::function<std::vector<std::string>(const std::string &)> names_for)
+  : names_for_(std::move(names_for))
+  {}
+
+  bool is_ready(const std::string & node_name) override
+  {
+    return unreachable.count(node_name) == 0;
+  }
+
+  void list_parameters(const std::string & node_name, NamesCallback callback) override
+  {
+    callback(names_for_(node_name));
+  }
+
+  void describe_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback) override
+  {
+    (void)node_name;
+    std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
+    for (const auto & name : names) {
+      rcl_interfaces::msg::ParameterDescriptor descriptor;
+      descriptor.name = name;
+      descriptor.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+      descriptors.push_back(descriptor);
+    }
+    callback(std::move(descriptors));
+  }
+
+  void get_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, ValuesCallback callback) override
+  {
+    (void)node_name;
+    std::vector<rcl_interfaces::msg::ParameterValue> values;
+    for (size_t i = 0; i < names.size(); ++i) {
+      rcl_interfaces::msg::ParameterValue value;
+      value.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+      value.integer_value = static_cast<int64_t>(i);
+      values.push_back(value);
+    }
+    callback(std::move(values));
+  }
+
+  std::set<std::string> unreachable;
+
+private:
+  std::function<std::vector<std::string>(const std::string &)> names_for_;
+};
+
 class GraphMonitorTest : public testing::Test
 {
 protected:
@@ -247,32 +303,24 @@ protected:
         return out;
       });
 
+    parameter_service_ = std::make_shared<MockParameterService>([this](const std::string & node_name) {
+      std::lock_guard<std::mutex> lock(mocks_mutex_);
+      std::vector<std::string> names;
+      for (const auto & node : mocked_nodes_) {
+        if (node.name == node_name) {
+          names = node.params;
+        }
+      }
+      return names;
+    });
+
     auto logger = logger_.get_child("graphmon");
 
     graphmon_.emplace(
       node_graph_,
       [this]() { return now_; },
       logger,
-      // query_params_fn
-      [this](const std::string & node_name, std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
-        return std::async(std::launch::async, [this, node_name, callback]() {
-          std::vector<std::string> param_names;
-          {
-            std::lock_guard<std::mutex> lock(mocks_mutex_);
-            for (const auto & node : mocked_nodes_) {
-              if (node.name == node_name) {
-                for (const auto & param : node.params) {
-                  param_names.push_back(param);
-                }
-              }
-            }
-          }
-
-          rcl_interfaces::msg::ListParametersResult result{};
-          result.names = param_names;
-          callback(result);
-        });
-      },
+      parameter_service_,
       rosgraph_monitor::GraphMonitorConfiguration{},
       [this](rosgraph_msgs::msg::Graph & msg) {
         std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
@@ -451,6 +499,7 @@ protected:
   rclcpp::Time now_{0, 0, RCL_ROS_TIME};
   rclcpp::Logger logger_;
   std::shared_ptr<MockGraph> node_graph_;
+  std::shared_ptr<MockParameterService> parameter_service_;
   std::optional<rosgraph_monitor::RosGraphMonitor> graphmon_;
 
   // Graph message handling
@@ -866,4 +915,66 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
     param_names.push_back(param.name);
   }
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
+
+  // Descriptors alone do not say what a node is actually running with, so the values are
+  // reported alongside them, one per descriptor.
+  ASSERT_EQ(node.parameter_values.size(), node.parameters.size()) << "parameter_values must be parallel to parameters";
+  for (const auto & descriptor : node.parameters) {
+    EXPECT_EQ(descriptor.type, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER)
+      << "descriptor type comes from the describe response, not a placeholder";
+  }
+}
+
+TEST_F(GraphMonitorTest, rosgraph_drops_parameter_query_for_a_departed_node)
+{
+  set_nodes({MockedNode("/leaving", {"param1"})});
+  node_graph_->notify_graph_change();
+  await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && !msg.nodes.front().parameters.empty();
+    },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the node's parameters");
+
+  // The node leaves; the monitor should stop reporting it rather than keep its parameters.
+  set_nodes({});
+  node_graph_->notify_graph_change();
+
+  auto rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.empty(); },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the departed node to be dropped");
+  EXPECT_TRUE(rosgraph_msg.nodes.empty());
+}
+
+TEST_F(GraphMonitorTest, rosgraph_reports_a_node_with_no_parameters)
+{
+  set_nodes({MockedNode("/bare", {})});
+  node_graph_->notify_graph_change();
+
+  auto rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.size() == 1; },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the node");
+
+  ASSERT_EQ(rosgraph_msg.nodes.size(), 1u);
+  EXPECT_TRUE(rosgraph_msg.nodes.front().parameters.empty());
+  EXPECT_TRUE(rosgraph_msg.nodes.front().parameter_values.empty());
+}
+
+TEST_F(GraphMonitorTest, rosgraph_still_reports_a_node_whose_parameters_cannot_be_read)
+{
+  // An unreachable parameter service must not stop the node appearing in the graph at all.
+  parameter_service_->unreachable.insert("/silent");
+  set_nodes({MockedNode("/silent", {"param1"})});
+  node_graph_->notify_graph_change();
+
+  auto rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.size() == 1; },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the node");
+
+  ASSERT_EQ(rosgraph_msg.nodes.size(), 1u);
+  EXPECT_EQ(rosgraph_msg.nodes.front().name, "/silent");
+  EXPECT_TRUE(rosgraph_msg.nodes.front().parameters.empty());
 }

@@ -791,8 +791,13 @@ TEST_F(GraphMonitorTest, rosgraph_generation)
 {
   // Set up test nodes
   set_node_names({"node1", "node2", "node3"});
-  // Generate rosgraph message
-  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg();
+
+  // The monitor takes an initial look at the graph when it is constructed and reports that,
+  // so skip past it rather than asserting on whichever message happens to be first.
+  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.size() == 3; },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the graph to report all three nodes");
 
   // Verify the message contains expected nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 3);

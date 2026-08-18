@@ -51,6 +51,12 @@ Node::Node(const rclcpp::NodeOptions & options)
 : rclcpp::Node("rosgraph_monitor", options)
 , param_listener_(get_node_parameters_interface())
 , params_(param_listener_.get_params())
+, sub_topic_statistics_(create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
+    "/topic_statistics", rclcpp::QoS{10}, std::bind(&Node::on_topic_statistics, this, std::placeholders::_1)))
+, pub_diagnostics_(create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10))
+, pub_rosgraph_(create_publisher<rosgraph_msgs::msg::Graph>("/rosgraph", rclcpp::QoS(1).transient_local().reliable()))
+, timer_publish_report_(create_wall_timer(
+    std::chrono::milliseconds(params_.diagnostics_publish_period_ms), std::bind(&Node::publish_diagnostics, this)))
 , graph_monitor_(
     get_node_graph_interface(),
     [this]() { return get_clock()->now(); },
@@ -58,12 +64,6 @@ Node::Node(const rclcpp::NodeOptions & options)
     std::bind(&Node::query_params, this, std::placeholders::_1, std::placeholders::_2),
     create_graph_monitor_config(params_),
     std::bind(&Node::publish_rosgraph, this, std::placeholders::_1))
-, sub_topic_statistics_(create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
-    "/topic_statistics", rclcpp::QoS{10}, std::bind(&Node::on_topic_statistics, this, std::placeholders::_1)))
-, pub_diagnostics_(create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10))
-, pub_rosgraph_(create_publisher<rosgraph_msgs::msg::Graph>("/rosgraph", rclcpp::QoS(1).transient_local().reliable()))
-, timer_publish_report_(create_wall_timer(
-    std::chrono::milliseconds(params_.diagnostics_publish_period_ms), std::bind(&Node::publish_diagnostics, this)))
 {
   param_listener_.setUserCallback(std::bind(&Node::update_params, this, std::placeholders::_1));
 }

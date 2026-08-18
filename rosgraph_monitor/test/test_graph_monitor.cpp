@@ -191,6 +191,7 @@ protected:
 
     // Set up default empty graph state, to be overridden
     EXPECT_CALL(*node_graph_, get_node_names).WillRepeatedly([this]() {
+      std::lock_guard<std::mutex> lock(mocks_mutex_);
       std::vector<std::string> node_names;
       for (const auto & node : mocked_nodes_) {
         node_names.push_back(node.name);
@@ -224,6 +225,7 @@ protected:
     });
     EXPECT_CALL(*node_graph_, get_publishers_info_by_topic)
       .WillRepeatedly([this](const std::string & topic_name, bool = false) {
+        std::lock_guard<std::mutex> lock(mocks_mutex_);
         std::vector<rclcpp::TopicEndpointInfo> out;
         for (const auto & [gid, endpoint] : endpoints_) {
           if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Publisher && endpoint.topic_name == topic_name) {
@@ -234,6 +236,7 @@ protected:
       });
     EXPECT_CALL(*node_graph_, get_subscriptions_info_by_topic)
       .WillRepeatedly([this](const std::string & topic_name, bool = false) {
+        std::lock_guard<std::mutex> lock(mocks_mutex_);
         std::vector<rclcpp::TopicEndpointInfo> out;
         for (const auto & [gid, endpoint] : endpoints_) {
           if (endpoint.info.endpoint_type() == rclcpp::EndpointType::Subscription && endpoint.topic_name == topic_name)
@@ -250,13 +253,17 @@ protected:
       node_graph_,
       [this]() { return now_; },
       logger,
+      // query_params_fn
       [this](const std::string & node_name, std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
         return std::async(std::launch::async, [this, node_name, callback]() {
           std::vector<std::string> param_names;
-          for (const auto & node : mocked_nodes_) {
-            if (node.name == node_name) {
-              for (const auto & param : node.params) {
-                param_names.push_back(param);
+          {
+            std::lock_guard<std::mutex> lock(mocks_mutex_);
+            for (const auto & node : mocked_nodes_) {
+              if (node.name == node_name) {
+                for (const auto & param : node.params) {
+                  param_names.push_back(param);
+                }
               }
             }
           }
@@ -265,13 +272,21 @@ protected:
           result.names = param_names;
           callback(result);
         });
+      },
+      rosgraph_monitor::GraphMonitorConfiguration{},
+      [this](rosgraph_msgs::msg::Graph & msg) {
+        std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
+        queue_.push_back(msg);
+        graphmon_msg_cv_.notify_one();
       });
+  }
 
-    graphmon_->set_graph_change_callback([this](rosgraph_msgs::msg::Graph & msg) {
-      std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
-      queue_.push_back(msg);
-      graphmon_msg_cv_.notify_one();
-    });
+  ~GraphMonitorTest() override
+  {
+    // The monitor runs threads that read the mocked graph and push into queue_, and it joins
+    // them when it is destroyed. It is declared before those members, so default destruction
+    // order would tear them down while those threads were still using them.
+    graphmon_.reset();
   }
 
   void trigger_and_wait()
@@ -325,18 +340,24 @@ protected:
 
   void set_nodes(std::vector<MockedNode> nodes)
   {
-    // Add the root namespace / onto the names, which should not be specified with it
-    mocked_nodes_.clear();
-    mocked_nodes_.reserve(nodes.size());
-    for (const auto & node : nodes) {
-      mocked_nodes_.push_back(node);
+    {
+      // Released before triggering, since the monitor reads this while we wait on it.
+      std::lock_guard<std::mutex> lock(mocks_mutex_);
+      mocked_nodes_.clear();
+      mocked_nodes_.reserve(nodes.size());
+      for (const auto & node : nodes) {
+        mocked_nodes_.push_back(node);
+      }
     }
     trigger_and_wait();
   }
 
   Endpoint add_endpoint(Endpoint endpoint)
   {
-    endpoints_.emplace(endpoint.info.endpoint_gid(), endpoint);
+    {
+      std::lock_guard<std::mutex> lock(mocks_mutex_);
+      endpoints_.emplace(endpoint.info.endpoint_gid(), endpoint);
+    }
     return endpoint;
   }
 
@@ -370,7 +391,10 @@ protected:
 
   void remove_endpoint(const Endpoint & endpoint)
   {
-    endpoints_.erase(endpoint.info.endpoint_gid());
+    {
+      std::lock_guard<std::mutex> lock(mocks_mutex_);
+      endpoints_.erase(endpoint.info.endpoint_gid());
+    }
   }
 
   rosgraph_monitor_msgs::msg::TopicStatistic make_stat(
@@ -437,6 +461,10 @@ protected:
   const std::string default_node_name_ = "testy0";
   const std::string default_topic_name_ = "/topic1";
   const rclcpp::QoS default_qos_{10};
+
+  /// Guards the mocked graph below. The test thread rewrites it while the monitor's watch
+  /// thread and its parameter-query threads are reading it through the mock.
+  mutable std::mutex mocks_mutex_;
   std::vector<MockedNode> mocked_nodes_;
   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
 };
@@ -763,8 +791,13 @@ TEST_F(GraphMonitorTest, rosgraph_generation)
 {
   // Set up test nodes
   set_node_names({"node1", "node2", "node3"});
-  // Generate rosgraph message
-  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg();
+
+  // The monitor takes an initial look at the graph when it is constructed and reports that,
+  // so skip past it rather than asserting on whichever message happens to be first.
+  rosgraph_msgs::msg::Graph rosgraph_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.size() == 3; },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the graph to report all three nodes");
 
   // Verify the message contains expected nodes
   EXPECT_EQ(rosgraph_msg.nodes.size(), 3);

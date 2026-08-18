@@ -5,7 +5,6 @@
 #define ROSGRAPH_MONITOR__MONITOR_HPP_
 
 #include <functional>
-#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -20,25 +19,18 @@
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"
-#include "rcl_interfaces/msg/list_parameters_result.hpp"
-#include "rcl_interfaces/msg/parameter_descriptor.hpp"
-#include "rcl_interfaces/msg/parameter_type.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor/event.hpp"
 #include "rosgraph_monitor/mutex_protected.hpp"
+#include "rosgraph_monitor/parameter_collector.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_msgs/msg/graph.hpp"
 #include "rosgraph_msgs/msg/qo_s_profile.hpp"
 #include "rosgraph_msgs/msg/topic.hpp"
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
-
-typedef std::shared_future<void> QueryParamsReturnType;
-typedef std::function<QueryParamsReturnType(
-  const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)>
-  QueryParamsFunc;
 
 // Optional trigger for monitor to call, to alert owner of updates to the graph
 typedef std::function<void(rosgraph_msgs::msg::Graph &)> GraphChangeCallback;
@@ -86,6 +78,16 @@ struct GraphMonitorConfiguration
     std::unordered_set<std::string> ignore_topic_names;
   } continuity;
 
+  /// Read once, when the monitor is constructed: the collector is built from these, so
+  /// changing them on a live monitor has no effect.
+  struct ParameterObservation
+  {
+    // How many nodes may be observed at once
+    size_t max_concurrent = 4;
+    // How long one node's observation may take before it is abandoned
+    std::chrono::milliseconds timeout{10000};
+  } parameters;
+
   struct TopicStatisticsChecks
   {
     // What fraction of the promised deadline the topic statistics may err by
@@ -114,12 +116,12 @@ public:
   /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param logger
   /// @param config Includes/excludes the entities to care about in diagnostic reporting
-  /// @param query_params Function to query parameters of a node by name
+  /// @param parameter_client Access to the parameter services of observed nodes
   RosGraphMonitor(
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    QueryParamsFunc query_params,
+    std::shared_ptr<ParameterServiceClient> parameter_client,
     GraphMonitorConfiguration config = GraphMonitorConfiguration{},
     GraphChangeCallback change_callback = GraphChangeCallback());
 
@@ -150,21 +152,19 @@ public:
 protected:
   /* Types */
 
-  struct ParameterTracking
-  {
-    std::string name;
-    uint8_t type;
-
-    rcl_interfaces::msg::ParameterDescriptor to_msg() const;
-  };
-
   /// @brief Keeps flags for tracking observed nodes over time
   struct NodeTracking
   {
     std::string name;
     bool missing = false;
     bool stale = false;
-    std::vector<ParameterTracking> params;
+    /// Descriptors and values as last observed. Empty until the collector reports them, and
+    /// left in place while a node is missing so a brief dropout does not blank the graph.
+    NodeParameters params;
+    /// Whether the collector has reported on this node at all. A node with no parameters is
+    /// still observed, so this is not the same as params being empty. Cleared when the node
+    /// returns after going missing, since its parameters may have changed while it was away.
+    bool params_observed = false;
 
     explicit NodeTracking(const std::string & name);
   };
@@ -229,11 +229,20 @@ protected:
   /// @return Whether to ignore tracking the node
   bool ignore_node(const std::string & node_name, GraphTracking & graph);
 
+  /// @brief Which nodes' parameter observations should change on a single graph update
+  struct NodeChanges
+  {
+    /// Present, but with no observation to show for it: newly seen, seen again after going
+    /// missing, or an earlier attempt that found the node's parameter services down.
+    std::vector<std::string> to_observe;
+    /// No longer present: any parameter observation for them should be abandoned
+    std::vector<std::string> departed;
+  };
+
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
-  /// @return Names of newly discovered nodes, whose parameters the caller should query
-  std::vector<std::string> track_node_updates(
-    const std::vector<std::string> & observed_node_names, GraphTracking & graph);
+  /// @return Which nodes need observing and which have left the graph
+  NodeChanges track_node_updates(const std::vector<std::string> & observed_node_names, GraphTracking & graph);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_topics_and_types
@@ -256,9 +265,9 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
-  /// @brief Query parameters for a newly discovered node
-  /// @param node_name The name of the node to query parameters for
-  void query_node_parameters(const std::string & node_name);
+  /// @brief Record parameters the collector has observed for a node
+  /// @note Runs on whichever thread delivered the parameter responses
+  void on_node_parameters(const std::string & node_name, NodeParameters parameters);
 
   /// @brief Invoke the graph change callback, if one is set.
   void notify_graph_change();
@@ -277,18 +286,19 @@ protected:
   std::thread watch_thread_;
   Event update_event_;
 
-  const QueryParamsFunc query_params_fn_;
-  std::unordered_map<std::string, std::shared_future<void>> params_futures_;
-
   /* Three different threads read and write to this state:
-   * - the watch thread reubuilding the graph
-   * - eaach parameter query's thread writing back its results
+   * - the watch thread rebuilding the graph
+   * - whichever thread delivers a parameter response, writing back what was observed
    * - the caller's thread reading via evaluate() or fill_rosgraph_msg()
    *
    * Mutex never held while invoking graph_change_callback_, which may trigger outside caller to re-enter.
    */
   MutexProtected<GraphTracking> graph_;
   GraphChangeCallback graph_change_callback_;
+
+  /// Declared last so it is destroyed first: its completion callback reaches back into the
+  /// tracked state and the change callback above, both of which must still exist.
+  std::unique_ptr<ParameterCollector> parameter_collector_;
 };
 
 }  // namespace rosgraph_monitor

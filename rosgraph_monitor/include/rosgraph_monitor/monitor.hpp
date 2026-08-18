@@ -82,6 +82,16 @@ struct GraphMonitorConfiguration
     std::unordered_set<std::string> ignore_topic_names;
   } continuity;
 
+  /// Applied when the monitor is constructed, so these are read-only parameters: changing them
+  /// later would not reach the collector that was already built from them.
+  struct ParameterObservation
+  {
+    // How many nodes may be observed at once
+    size_t max_concurrent = 4;
+    // How long one node's observation may take before it is abandoned
+    std::chrono::milliseconds timeout{10000};
+  } parameters;
+
   struct TopicStatisticsChecks
   {
     // What fraction of the promised deadline the topic statistics may err by

@@ -40,6 +40,8 @@ GraphMonitorConfiguration Node::create_graph_monitor_config(const rosgraph_monit
   gconf.continuity.ignore_subscriber_nodes = vec_to_set(gparms.continuity.ignore_subscriber_nodes);
   gconf.continuity.ignore_topic_types = vec_to_set(gparms.continuity.ignore_topic_types);
   gconf.continuity.ignore_topic_names = vec_to_set(gparms.continuity.ignore_topic_names);
+  gconf.parameters.max_concurrent = static_cast<size_t>(gparms.parameters.max_concurrent_queries);
+  gconf.parameters.timeout = std::chrono::milliseconds{gparms.parameters.query_timeout_ms};
   gconf.topic_statistics.deadline_allowed_error = gparms.topic_statistics.deadline_allowed_error;
   gconf.topic_statistics.stale_timeout = std::chrono::milliseconds{gparms.topic_statistics.stale_timeout_ms};
   gconf.topic_statistics.mandatory_topics = vec_to_set(gparms.topic_statistics.mandatory_topics);

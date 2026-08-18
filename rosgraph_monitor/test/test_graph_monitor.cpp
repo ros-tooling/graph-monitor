@@ -236,6 +236,32 @@ private:
   std::function<std::vector<std::string>(const std::string &)> names_for_;
 };
 
+/// Accepts requests and never answers them, so observations stay in flight and the number of
+/// nodes started at once can be counted.
+class BlockingParameterService : public rosgraph_monitor::ParameterServiceClient
+{
+public:
+  bool is_ready(const std::string &) override
+  {
+    return true;
+  }
+
+  void list_parameters(const std::string & node_name, NamesCallback) override
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    started.insert(node_name);
+  }
+
+  void describe_parameters(const std::string &, const std::vector<std::string> &, DescriptorsCallback) override
+  {}
+
+  void get_parameters(const std::string &, const std::vector<std::string> &, ValuesCallback) override
+  {}
+
+  std::mutex mutex;
+  std::set<std::string> started;
+};
+
 class GraphMonitorTest : public testing::Test
 {
 protected:
@@ -945,6 +971,31 @@ TEST_F(GraphMonitorTest, rosgraph_drops_parameter_query_for_a_departed_node)
     std::chrono::milliseconds(500),
     "Timed out waiting for the departed node to be dropped");
   EXPECT_TRUE(rosgraph_msg.nodes.empty());
+}
+
+TEST_F(GraphMonitorTest, parameter_observation_limits_come_from_the_configuration)
+{
+  // Rebuild the monitor with a deliberately small cap and a parameter service that never
+  // answers, so the number of nodes it starts on is observable.
+  auto blocked = std::make_shared<BlockingParameterService>();
+  rosgraph_monitor::GraphMonitorConfiguration config;
+  config.parameters.max_concurrent = 2;
+
+  std::optional<rosgraph_monitor::RosGraphMonitor> monitor;
+  monitor.emplace(
+    node_graph_,
+    [this]() { return now_; },
+    logger_.get_child("limits"),
+    blocked,
+    config,
+    [](rosgraph_msgs::msg::Graph &) {});
+
+  set_nodes({MockedNode("/a", {"p"}), MockedNode("/b", {"p"}), MockedNode("/c", {"p"}), MockedNode("/d", {"p"})});
+  node_graph_->notify_graph_change();
+  ASSERT_TRUE(monitor->wait_for_update(std::chrono::milliseconds(500)));
+
+  EXPECT_EQ(blocked->started.size(), 2u) << "the configured cap should bound concurrent observations";
+  monitor.reset();
 }
 
 TEST_F(GraphMonitorTest, rosgraph_reports_a_node_with_no_parameters)

@@ -49,6 +49,23 @@ rosgraph_monitor:
         description: Never report discontinuities on topics with these exact names
         default_value:
           - /rosout
+    parameters:
+      max_concurrent_queries:
+        type: int
+        read_only: true
+        description: |
+          How many nodes may have their parameters observed at once.
+          Each observation has one request outstanding at a time, so this also bounds how many
+          parameter service requests are in flight across the whole graph.
+        default_value: 4
+      query_timeout_ms:
+        type: int
+        read_only: true
+        description: |
+          How long a single node's parameter observation may take before it is abandoned.
+          Without a ceiling, a node that stops answering part way through would hold one of the
+          concurrent slots indefinitely.
+        default_value: 10000
     topic_statistics:
       deadline_allowed_error:
         type: double

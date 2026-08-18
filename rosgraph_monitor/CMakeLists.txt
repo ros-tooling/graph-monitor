@@ -27,6 +27,8 @@ endif()
 add_library(${PROJECT_NAME} SHARED
   src/event.cpp
   src/monitor.cpp
+  src/parameter_collector.cpp
+  src/rclcpp_parameter_client.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -89,6 +91,9 @@ if(BUILD_TESTING)
 
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor ${PROJECT_NAME})
+
+  ament_add_gmock(test_parameter_collector test/test_parameter_collector.cpp)
+  target_link_libraries(test_parameter_collector ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

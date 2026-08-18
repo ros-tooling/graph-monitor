@@ -671,7 +671,9 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg)
 void RosGraphMonitor::notify_graph_change()
 {
   if (graph_change_callback_) {
-    graph_change_callback_();
+    rosgraph_msgs::msg::Graph msg;
+    fill_rosgraph_msg(msg);
+    graph_change_callback_(msg);
   }
 }
 

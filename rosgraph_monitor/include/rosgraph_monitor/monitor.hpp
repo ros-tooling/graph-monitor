@@ -27,6 +27,7 @@
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor/event.hpp"
+#include "rosgraph_monitor/mutex_protected.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_msgs/msg/graph.hpp"
 #include "rosgraph_msgs/msg/qo_s_profile.hpp"
@@ -37,7 +38,10 @@ typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
 typedef std::shared_future<void> QueryParamsReturnType;
 typedef std::function<QueryParamsReturnType(
   const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)>
-  QueryParams;
+  QueryParamsFunc;
+
+// Optional trigger for monitor to call, to alert owner of updates to the graph
+typedef std::function<void(rosgraph_msgs::msg::Graph &)> GraphChangeCallback;
 
 /// @brief Provide a std::hash specialization so we can use RMW GID as a map key
 template <>
@@ -115,8 +119,9 @@ public:
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    QueryParams query_params,
-    GraphMonitorConfiguration config = GraphMonitorConfiguration{});
+    QueryParamsFunc query_params,
+    GraphMonitorConfiguration config = GraphMonitorConfiguration{},
+    GraphChangeCallback change_callback = GraphChangeCallback());
 
   virtual ~RosGraphMonitor();
 
@@ -129,7 +134,7 @@ public:
   /// @return True if there were graph updates detected, or false on timeout
   bool wait_for_update(std::chrono::milliseconds timeout);
 
-  /// @return Mutable reference to the configuration, for updating
+  /// @return Mutable reference to the configuration, fo;r updating
   GraphMonitorConfiguration & config();
 
   /// @return Const reference to configuration
@@ -141,10 +146,6 @@ public:
 
   /// @brief Fill a Graph message containing current graph state
   void fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg);
-
-  /// @brief Set callback function to be called when graph changes
-  /// @param callback Function to call when graph updates occur
-  void set_graph_change_callback(std::function<void(rosgraph_msgs::msg::Graph &)> callback);
 
 protected:
   /* Types */
@@ -196,6 +197,25 @@ protected:
   typedef std::unordered_set<RosRmwGid> EndpointSet;
   typedef std::pair<std::string, std::string> NodeAndTopic;
 
+  struct GraphTracking
+  {
+    // Graph entities
+    std::unordered_map<std::string, NodeTracking> nodes;
+    EndpointTrackingMap publishers;
+    EndpointTrackingMap subscriptions;
+
+    // Convenience derivations
+    std::unordered_map<NodeAndTopic, RosRmwGid> publisher_lookup;
+    std::unordered_map<NodeAndTopic, RosRmwGid> subscription_lookup;
+    std::unordered_map<std::string, TopicTracking> topic_endpoint_counts;
+
+    // Analysis
+    std::unordered_set<std::string> ignored_nodes;
+    std::unordered_set<std::string> returned_nodes;
+    std::unordered_set<std::string> pubs_with_no_subs;  // a.k.a. "leaf topics"
+    std::unordered_set<std::string> subs_with_no_pubs;  // a.k.a. "dead sinks"
+  };
+
   /* Methods */
 
   /// @brief Update internal graph representation and detect changes
@@ -207,36 +227,25 @@ protected:
   /// @brief Should we skip tracking this node?
   /// @param node_name
   /// @return Whether to ignore tracking the node
-  bool ignore_node(const std::string & node_name);
+  bool ignore_node(const std::string & node_name, GraphTracking & graph);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
   /// @return Names of newly discovered nodes, whose parameters the caller should query
-  /// @note Caller must hold tracking_mutex_
-  std::vector<std::string> track_node_updates(const std::vector<std::string> & observed_node_names);
+  std::vector<std::string> track_node_updates(
+    const std::vector<std::string> & observed_node_names, GraphTracking & graph);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_topics_and_types
-  /// @note Caller must hold tracking_mutex_
-  void track_endpoint_updates(const TopicsToTypes & observed_topics_and_types);
+  void track_endpoint_updates(const TopicsToTypes & observed_topics_and_types, GraphTracking & graph);
 
-  /// @note Caller must hold tracking_mutex_
   /// @return Iterator to existing or added publisher, or nullopt if node ignored
   std::optional<EndpointTrackingMap::iterator> add_publisher(
-    const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
+    const std::string & topic_name, const rclcpp::TopicEndpointInfo & info, GraphTracking & graph);
 
-  /// @note Caller must hold tracking_mutex_
-  /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
-  std::optional<RosRmwGid> lookup_publisher(const std::string & node_name, const std::string & topic_name) const;
-
-  /// @note Caller must hold tracking_mutex_
   /// @return Iterator to existing or added publisher, or nullopt if node ignored
   std::optional<EndpointTrackingMap::iterator> add_subscription(
-    const std::string & topic_name, const rclcpp::TopicEndpointInfo & info);
-
-  /// @note Caller must hold tracking_mutex_
-  /// @return GID of a publisher if found, else nullopt if such an endpoint not tracked.
-  std::optional<RosRmwGid> lookup_subscription(const std::string & node_name, const std::string & topic_name) const;
+    const std::string & topic_name, const rclcpp::TopicEndpointInfo & info, GraphTracking & graph);
 
   bool topic_period_ok(
     const rosgraph_monitor_msgs::msg::TopicStatistic & stat, const rclcpp::Duration & deadline) const;
@@ -249,12 +258,9 @@ protected:
 
   /// @brief Query parameters for a newly discovered node
   /// @param node_name The name of the node to query parameters for
-  /// @note Must be called without tracking_mutex_ held. Replacing a node's future joins the
-  ///   previous query's thread, and the query's callback takes the mutex itself.
   void query_node_parameters(const std::string & node_name);
 
   /// @brief Invoke the graph change callback, if one is set.
-  /// @note Must be called without tracking_mutex_ held; the callback reads the tracked state.
   void notify_graph_change();
 
   /* Members */
@@ -270,32 +276,19 @@ protected:
   rclcpp::Event::SharedPtr graph_change_event_;
   std::thread watch_thread_;
   Event update_event_;
-  std::function<void()> graph_change_callback_;
 
-  /// Guards everything below, which three threads reach: the watch thread rebuilding the graph,
-  /// each parameter query's thread writing back its result, and the caller's thread reading it
-  /// out via evaluate() or fill_rosgraph_msg(). Never held while invoking
-  /// graph_change_callback_, which reads the same state.
-  mutable std::mutex tracking_mutex_;
+  const QueryParamsFunc query_params_fn_;
+  std::unordered_map<std::string, std::shared_future<void>> params_futures_;
 
-  QueryParams query_params_;
-
-  // Graph cache
-  std::unordered_map<std::string, NodeTracking> nodes_;
-  EndpointTrackingMap publishers_;
-  EndpointTrackingMap subscriptions_;
-  std::unordered_map<NodeAndTopic, RosRmwGid> publisher_lookup_;
-  std::unordered_map<NodeAndTopic, RosRmwGid> subscription_lookup_;
-
-  // Tracking outputs
-  std::unordered_set<std::string> ignored_nodes_;
-  std::unordered_set<std::string> returned_nodes_;
-  std::unordered_map<std::string, TopicTracking> topic_endpoint_counts_;
-  std::unordered_set<std::string> pubs_with_no_subs_;  // a.k.a. "leaf topics"
-  std::unordered_set<std::string> subs_with_no_pubs_;  // a.k.a. "dead sinks"
-  /// Owned solely by the watch thread, and by the destructor once that thread has joined,
-  /// so it is deliberately outside tracking_mutex_: dropping a future here joins its thread.
-  std::unordered_map<std::string, std::shared_future<void>> params_futures;
+  /* Three different threads read and write to this state:
+   * - the watch thread reubuilding the graph
+   * - eaach parameter query's thread writing back its results
+   * - the caller's thread reading via evaluate() or fill_rosgraph_msg()
+   *
+   * Mutex never held while invoking graph_change_callback_, which may trigger outside caller to re-enter.
+   */
+  MutexProtected<GraphTracking> graph_;
+  GraphChangeCallback graph_change_callback_;
 };
 
 }  // namespace rosgraph_monitor

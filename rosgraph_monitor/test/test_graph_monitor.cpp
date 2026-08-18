@@ -253,6 +253,7 @@ protected:
       node_graph_,
       [this]() { return now_; },
       logger,
+      // query_params_fn
       [this](const std::string & node_name, std::function<void(rcl_interfaces::msg::ListParametersResult)> callback) {
         return std::async(std::launch::async, [this, node_name, callback]() {
           std::vector<std::string> param_names;
@@ -271,13 +272,13 @@ protected:
           result.names = param_names;
           callback(result);
         });
+      },
+      rosgraph_monitor::GraphMonitorConfiguration{},
+      [this](rosgraph_msgs::msg::Graph & msg) {
+        std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
+        queue_.push_back(msg);
+        graphmon_msg_cv_.notify_one();
       });
-
-    graphmon_->set_graph_change_callback([this](rosgraph_msgs::msg::Graph & msg) {
-      std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
-      queue_.push_back(msg);
-      graphmon_msg_cv_.notify_one();
-    });
   }
 
   ~GraphMonitorTest() override

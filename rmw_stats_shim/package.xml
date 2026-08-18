@@ -10,9 +10,14 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>rcpputils</depend>
+  <depend>rmw</depend>
   <depend>rosgraph_monitor_msgs</depend>
   <depend>rosidl_runtime_cpp</depend>
   <depend>rosidl_typesupport_cpp</depend>
+  <depend>topic_stats_core</depend>
+
+  <test_depend>ament_cmake_gmock</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -3,7 +3,9 @@ SPDX-FileCopyrightText: 2026 Polymath Robotics, Inc.
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Egress prototypes: assumptions, decisions, and open questions
+# Topic statistics: assumptions, decisions, and open questions
+
+Covers the egress prototypes and the tracepoint ingest adapter.
 
 Written alongside the E1 and E2 egress prototypes so that the judgement calls made without you are
 visible rather than buried in the diff. Nothing here is settled; it is what to argue with.
@@ -21,6 +23,32 @@ Both egress paths are complete and selected per process by `ROS_TOPIC_STATISTICS
 The swap is proven by `topic_stats_collector/test/test_egress_equivalence.cpp`, which drives one real
 `Collector`, sends the identical snapshot down both paths, and requires identical `TopicStatistics`
 out. It pins the expected statistic count so it cannot pass by trivially matching one sample.
+
+## The tracepoint ingest adapter
+
+`topic_stats_tracetools` is the reason for the whole restructure: it gathers the same statistics
+from the instrumentation `rcl` and the RMW implementations already call, so it needs no patched
+`rmw_implementation`. It is `LD_PRELOAD`ed and defines only the `ros_trace_*` symbols it uses,
+chaining each through to the real tracetools so a live LTTng session is unaffected.
+
+Verified end to end against a real rclcpp process: a 100ms publish loop was measured at 100.32ms
+published period and 100.34ms received period, with take age around 0.2ms.
+
+Three things about it are worth knowing.
+
+**There are no destruction tracepoints, for anything.** ros2_tracing has `rcl_publisher_init` and no
+`rcl_publisher_fini`. Nothing ever says an endpoint went away, so the registry would grow for the
+life of the process. Hence idle eviction in the core, which is only safe because the adapter keeps
+descriptors and can register an evicted endpoint afresh when it speaks again. Without that, a topic
+publishing once an hour would be dropped and then never measured for the life of the process.
+
+**Handles get reused.** The middleware can hand a freed endpoint's address back for a new one, and
+since nothing announced the destruction, a repeated init is the only signal. It replaces the mapping
+and unregisters the old endpoint.
+
+**Intra-process publishes are invisible**, exactly as with the RMW wrapper: they never reach
+`rmw_publish`. Unlike the RMW wrapper, this is fixable here, because `rclcpp_intra_publish` and the
+ring buffer tracepoints exist and could be interposed. Not done.
 
 ## Decisions made without asking
 
@@ -43,6 +71,13 @@ With a ring, loss is bounded by the ring size, and is counted and reported rathe
 
 **Segments are named `topic_stats.<pid namespace>.<pid>`, and liveness comes from an advisory
 lock, not from a pid.** Both because of containers; see the section below.
+
+**The tracepoint adapter's singleton is deliberately leaked, and unlinks its segment via `atexit`.**
+The first tracepoint can fire before `main()` and the last during static destruction, so destroying
+the object at exit would be a use-after-free waiting to happen. That leaves nobody to unlink the
+shared memory segment, which matters on a machine with no collector running, so an `atexit` handler
+removes the name. Unlinking does not disturb an existing mapping, so late tracepoints still write
+somewhere harmless.
 
 **Backlog is skipped when the collector attaches to a writer.** A process running for hours holds a
 ring of history whose timestamps are long past, and replaying it would look like a burst of stale
@@ -143,6 +178,15 @@ These are the ones most likely to be wrong for your deployment.
    `on_topic_statistics`. Both egress paths carry it faithfully, including negative values from
    clock skew. Nothing consumes it yet.
 
+7. **Which ingest ships?** The tracepoint adapter needs no fork, covers rmw_zenoh as well as the DDS
+   implementations, and can grow to executor and callback metrics that the RMW wrapper can never
+   see. Against it: `LD_PRELOAD` on every process is its own operational imposition, and it depends
+   on the `tracetools` ABI, which nobody promised us. The RMW wrapper is the known quantity.
+
+8. **What is the eviction threshold for your fleet?** The default of 600 quiet reports is ten
+   minutes at the default rate, picked because it is clearly longer than any deadline-checked topic
+   would go silent while healthy. `revived_endpoints()` being nonzero means it is too aggressive.
+
 ## Verified by hand, not by a test
 
 The E2 path was exercised across real process boundaries with a standalone writer and the collector
@@ -164,5 +208,10 @@ pid 1, but nothing has run in two real containers.
   equivalence test, and the publish call itself is one line, but no test subscribes.
 - No benchmark comparing the two paths. Deciding between them on deployment grounds probably wants
   one.
+- No cross-validation run yet: both ingests into one core, two sinks, diffing the output. That was
+  step 4 of the original plan and is the strongest correctness check available for the tracepoint
+  path, since it compares against the RMW wrapper we already trust.
+- The tracepoint adapter has not been run with a live LTTng session attached, so the chaining is
+  verified by construction rather than by observation.
 - `pre-commit` is not installed in this container, so the `polymath_code_standard` hooks have not run
   over any of this.

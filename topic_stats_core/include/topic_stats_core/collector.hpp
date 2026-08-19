@@ -34,6 +34,8 @@ struct CollectorDiagnostics
   uint64_t mismatched_records = 0;
   /// Takes whose source timestamp was present but unusable, so no take age was produced.
   uint64_t unusable_source_timestamps = 0;
+  /// Endpoints dropped for going quiet, which only happens if an adapter asks for it.
+  uint64_t evicted_endpoints = 0;
   size_t live_nodes = 0;
   size_t live_endpoints = 0;
 };
@@ -80,6 +82,18 @@ public:
   /// consume operation: two snapshots in a row will find nothing the second time.
   StatsReport snapshot(SnapshotMode mode = SnapshotMode::OnlyChanged);
 
+  /// Unregisters endpoints that have produced no measurement for this many consecutive snapshots,
+  /// returning what was dropped so an ingest adapter can prune its own handle mapping.
+  ///
+  /// Exists for ingest adapters that are never told an endpoint went away. The tracepoint adapter
+  /// is one: ros2_tracing emits `rcl_publisher_init` and friends but has no matching fini
+  /// tracepoint, so without this its registry would grow for the life of the process. The RMW
+  /// wrapper sees real destruction and has no need to call it.
+  ///
+  /// Idleness is counted in snapshots rather than in time, so it follows the reporting cadence
+  /// rather than needing a clock of its own. A threshold of zero evicts nothing.
+  std::vector<EndpointId> evict_idle(uint32_t idle_snapshots);
+
   CollectorDiagnostics diagnostics() const;
 
 private:
@@ -114,6 +128,9 @@ private:
     std::optional<MonoTime> last_event;
     /// Created on first use. At most three entries in practice, so a linear scan beats a map.
     std::vector<Measurement> measurements;
+    /// Consecutive snapshots that found nothing new to report about this endpoint. Reset whenever
+    /// it produces a sample.
+    uint32_t idle_snapshots = 0;
   };
 
   struct NodeState
@@ -145,6 +162,7 @@ private:
   std::atomic<uint64_t> stale_id_records_{0};
   std::atomic<uint64_t> mismatched_records_{0};
   std::atomic<uint64_t> unusable_source_timestamps_{0};
+  std::atomic<uint64_t> evicted_endpoints_{0};
 };
 
 }  // namespace topic_stats_core

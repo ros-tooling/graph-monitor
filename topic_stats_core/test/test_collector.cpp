@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -395,5 +396,122 @@ TEST(CollectorOptions, window_size_bounds_how_many_measurements_are_averaged)
   const auto sample = find_sample(collector.snapshot(), "/n", "/t", StatKind::PublishedPeriod);
   ASSERT_TRUE(sample.has_value());
   EXPECT_EQ(sample->window_count, 2u);
+  EXPECT_EQ(sample->mean, ms(100));
+}
+
+// Eviction exists for ingest adapters that are never told an endpoint went away. ros2_tracing has
+// `rcl_publisher_init` and no matching fini tracepoint, so without this the tracepoint adapter's
+// registry would grow for the life of the process.
+
+TEST_F(CollectorTest, nothing_is_evicted_by_default)
+{
+  // The RMW adapter sees real destruction events and must never have endpoints pulled out from
+  // under it, so a threshold of zero has to mean never.
+  collector->record_publish(pub);
+  for (int i = 0; i < 100; ++i) {
+    collector->snapshot();
+  }
+  EXPECT_TRUE(collector->evict_idle(0).empty());
+  EXPECT_EQ(collector->diagnostics().live_endpoints, 2u);
+}
+
+TEST_F(CollectorTest, an_endpoint_that_goes_quiet_is_eventually_evicted)
+{
+  collector->record_publish(pub);
+  clock->advance(ms(100));
+  collector->record_publish(pub);
+  ASSERT_EQ(total_samples(collector->snapshot()), 1u);
+
+  // Two snapshots with nothing to report.
+  collector->snapshot();
+  collector->snapshot();
+
+  const auto evicted = collector->evict_idle(2);
+  ASSERT_EQ(evicted.size(), 2u) << "both the silent publisher and the never-used subscription";
+  EXPECT_EQ(collector->diagnostics().live_endpoints, 0u);
+  EXPECT_EQ(collector->diagnostics().evicted_endpoints, 2u);
+}
+
+TEST_F(CollectorTest, eviction_returns_the_ids_so_an_adapter_can_prune_its_own_map)
+{
+  // The adapter keys middleware handles to these ids. If it is not told what went away it will
+  // keep resolving handles to ids the core has forgotten, and every message will be counted as a
+  // stale record.
+  collector->snapshot();
+  const auto evicted = collector->evict_idle(1);
+  ASSERT_EQ(evicted.size(), 2u);
+  EXPECT_TRUE(
+    std::find(evicted.begin(), evicted.end(), pub) != evicted.end() &&
+    std::find(evicted.begin(), evicted.end(), sub) != evicted.end());
+
+  collector->record_publish(pub);
+  EXPECT_EQ(collector->diagnostics().stale_id_records, 1u);
+}
+
+TEST_F(CollectorTest, an_endpoint_that_keeps_reporting_is_never_evicted)
+{
+  for (int i = 0; i < 20; ++i) {
+    clock->advance(ms(100));
+    collector->record_publish(pub);
+    collector->snapshot();
+    const auto evicted = collector->evict_idle(3);
+    EXPECT_TRUE(std::find(evicted.begin(), evicted.end(), pub) == evicted.end())
+      << "an actively reporting publisher was evicted on round " << i;
+  }
+}
+
+TEST_F(CollectorTest, a_quiet_spell_shorter_than_the_threshold_does_not_evict)
+{
+  collector->record_publish(pub);
+  clock->advance(ms(100));
+  collector->record_publish(pub);
+  collector->snapshot();
+
+  collector->snapshot();  // one idle snapshot
+  auto evicted = collector->evict_idle(3);
+  EXPECT_TRUE(std::find(evicted.begin(), evicted.end(), pub) == evicted.end());
+
+  // Traffic resumes, so the idle count restarts rather than accumulating across the gap.
+  clock->advance(ms(100));
+  collector->record_publish(pub);
+  collector->snapshot();
+  collector->snapshot();
+  collector->snapshot();
+  evicted = collector->evict_idle(3);
+  EXPECT_TRUE(std::find(evicted.begin(), evicted.end(), pub) == evicted.end())
+    << "the idle count did not reset when traffic resumed";
+}
+
+TEST_F(CollectorTest, an_endpoint_that_has_never_reported_is_evicted_like_any_other)
+{
+  // Deliberate, and it is why an adapter that uses eviction must be able to register an endpoint
+  // again from its own records. A subscription on a topic that publishes once an hour is
+  // indistinguishable here from one whose node is long gone, and getting that wrong in the other
+  // direction would mean never reclaiming anything.
+  const auto quiet = collector->register_endpoint(node, EndpointDescriptor{EndpointKind::Subscription, "/rare", {}});
+  collector->snapshot();
+  collector->snapshot();
+
+  const auto evicted = collector->evict_idle(2);
+  EXPECT_TRUE(std::find(evicted.begin(), evicted.end(), quiet) != evicted.end());
+}
+
+TEST_F(CollectorTest, an_evicted_endpoint_can_be_registered_again)
+{
+  // The recovery path for the case above. Registration is by descriptor, not by handle, so an
+  // adapter that kept the descriptor can bring an endpoint back when traffic finally arrives, and
+  // measurement resumes from scratch rather than being lost for the life of the process.
+  collector->snapshot();
+  const auto evicted = collector->evict_idle(1);
+  ASSERT_FALSE(evicted.empty());
+
+  const auto revived = collector->register_endpoint(node, EndpointDescriptor{EndpointKind::Publisher, "/chatter", {}});
+  ASSERT_TRUE(revived.valid());
+  collector->record_publish(revived);
+  clock->advance(ms(100));
+  collector->record_publish(revived);
+
+  const auto sample = find_sample(collector->snapshot(), "/ns/talker", "/chatter", StatKind::PublishedPeriod);
+  ASSERT_TRUE(sample.has_value());
   EXPECT_EQ(sample->mean, ms(100));
 }

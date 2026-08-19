@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Polymath Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "rmw_stats_shim/timer.hpp"
+#include "topic_stats_core/timer.hpp"
 
 #include <utility>
 
-namespace rmw_stats_shim
+namespace topic_stats_core
 {
 
 Timer::Timer(std::function<void(void)> func, std::chrono::milliseconds interval)
@@ -73,4 +73,4 @@ bool Timer::isRunning()
   return running_;
 }
 
-}  // namespace rmw_stats_shim
+}  // namespace topic_stats_core

@@ -11,11 +11,11 @@
 
 #include "rcpputils/shared_library.hpp"
 #include "rmw/rmw.h"
-#include "rmw_stats_shim/handle_map.hpp"
 #include "rmw_stats_shim/rmw_publisher_sink.hpp"
-#include "rmw_stats_shim/timer.hpp"
 #include "topic_stats_core/collector.hpp"
+#include "topic_stats_core/handle_map.hpp"
 #include "topic_stats_core/sink.hpp"
+#include "topic_stats_core/timer.hpp"
 #include "topic_stats_core/types.hpp"
 
 namespace rmw_stats_shim
@@ -101,10 +101,10 @@ private:
   /// because creating a publisher needs an rmw_node_t that only this adapter has.
   RmwPublisherSink * rmw_sink_ = nullptr;
 
-  HandleMap<topic_stats_core::NodeId> nodes_;
-  HandleMap<EndpointEntry> endpoints_;
+  topic_stats_core::HandleMap<topic_stats_core::NodeId> nodes_;
+  topic_stats_core::HandleMap<EndpointEntry> endpoints_;
 
-  std::optional<Timer> timer_;
+  std::optional<topic_stats_core::Timer> timer_;
 };
 
 }  // namespace rmw_stats_shim

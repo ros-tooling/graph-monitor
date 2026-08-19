@@ -206,6 +206,14 @@ StatsReport Collector::snapshot(SnapshotMode mode)
         sample.max = measurement.window.max();
         samples.push_back(std::move(sample));
       }
+
+      // Tracked under the same lock rather than a second acquisition. Counted in OnlyChanged mode
+      // too, where "nothing to report" is exactly what an endpoint going quiet looks like.
+      if (samples.empty()) {
+        state.idle_snapshots++;
+      } else {
+        state.idle_snapshots = 0;
+      }
     }
 
     if (samples.empty()) {
@@ -227,12 +235,34 @@ StatsReport Collector::snapshot(SnapshotMode mode)
   return report;
 }
 
+std::vector<EndpointId> Collector::evict_idle(uint32_t idle_snapshots)
+{
+  std::vector<EndpointId> evicted;
+  if (idle_snapshots == 0) {
+    return evicted;
+  }
+
+  std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+  endpoints_.for_each([&](EndpointId id, EndpointState & state) {
+    std::lock_guard<std::mutex> state_lock(state.mutex);
+    if (state.idle_snapshots >= idle_snapshots) {
+      evicted.push_back(id);
+    }
+  });
+  for (const auto & id : evicted) {
+    endpoints_.erase(id);
+  }
+  evicted_endpoints_.fetch_add(evicted.size(), std::memory_order_relaxed);
+  return evicted;
+}
+
 CollectorDiagnostics Collector::diagnostics() const
 {
   CollectorDiagnostics diagnostics;
   diagnostics.stale_id_records = stale_id_records_.load(std::memory_order_relaxed);
   diagnostics.mismatched_records = mismatched_records_.load(std::memory_order_relaxed);
   diagnostics.unusable_source_timestamps = unusable_source_timestamps_.load(std::memory_order_relaxed);
+  diagnostics.evicted_endpoints = evicted_endpoints_.load(std::memory_order_relaxed);
 
   std::shared_lock<std::shared_mutex> lock(registry_mutex_);
   diagnostics.live_nodes = nodes_.live_count();

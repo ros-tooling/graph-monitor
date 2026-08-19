@@ -255,7 +255,10 @@ void StatCollector::publishStatistics()
   if (sink_ == nullptr) {
     return;
   }
-  sink_->publish(collector_->snapshot());
+  const auto report = collector_->snapshot();
+  if (!report.empty()) {
+    sink_->publish(report);
+  }
 }
 
 }  // namespace rmw_stats_shim

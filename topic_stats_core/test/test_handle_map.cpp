@@ -9,11 +9,11 @@
 #include <thread>
 #include <vector>
 
-#include "rmw_stats_shim/handle_map.hpp"
+#include "topic_stats_core/handle_map.hpp"
 #include "topic_stats_core/types.hpp"
 
-using rmw_stats_shim::HandleMap;
 using topic_stats_core::EndpointId;
+using topic_stats_core::HandleMap;
 using topic_stats_core::NodeId;
 
 namespace

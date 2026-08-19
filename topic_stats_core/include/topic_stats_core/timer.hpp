@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef RMW_STATS_SHIM__TIMER_HPP_
-#define RMW_STATS_SHIM__TIMER_HPP_
+#ifndef TOPIC_STATS_CORE__TIMER_HPP_
+#define TOPIC_STATS_CORE__TIMER_HPP_
 
 #include <atomic>
 #include <chrono>
@@ -12,10 +12,14 @@
 #include <thread>
 #include <utility>
 
-namespace rmw_stats_shim
+namespace topic_stats_core
 {
 
 /// @brief Simple periodic timer that spawns a thread to call a function at specified interval.
+///
+/// Lives here rather than in an ingest adapter because reporting cadence is the same problem for
+/// every adapter, and because the callback runs on its own thread, which is what keeps reporting
+/// off the hot path.
 class Timer
 {
 public:
@@ -51,6 +55,6 @@ private:
   std::atomic<bool> running_ = false;
 };
 
-}  // namespace rmw_stats_shim
+}  // namespace topic_stats_core
 
-#endif  // RMW_STATS_SHIM__TIMER_HPP_
+#endif  // TOPIC_STATS_CORE__TIMER_HPP_

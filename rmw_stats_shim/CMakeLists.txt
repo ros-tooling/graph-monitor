@@ -28,7 +28,6 @@ add_library(${PROJECT_NAME} SHARED
   src/rmw_publisher_sink.cpp
   src/shim.cpp
   src/stat_collector.cpp
-  src/timer.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -48,11 +47,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 if(BUILD_TESTING)
   find_package(ament_cmake_gmock REQUIRED)
 
-  # Both suites cover the parts of this adapter that do not need a middleware: the handle mapping
-  # and the conversion to the outgoing message.
-  ament_add_gmock(test_handle_map test/test_handle_map.cpp)
-  target_link_libraries(test_handle_map ${PROJECT_NAME})
-
+  # The handle mapping this adapter used to own now lives in topic_stats_core, which tests it.
+  # What remains here that is testable without a middleware is the egress selection.
+  ament_add_gmock(test_egress_selection test/test_egress_selection.cpp)
+  target_link_libraries(test_egress_selection ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

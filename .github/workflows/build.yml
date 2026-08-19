@@ -22,6 +22,7 @@ jobs:
           - topic_stats_core
           - topic_stats_ros
           - topic_stats_shm
+          - topic_stats_tracetools
         include:
           - ros: humble
             ubuntu: jammy
@@ -140,7 +141,7 @@ jobs:
         with:
           target-ros2-distro: rolling
           vcs-repo-file-url: /tmp/deps.repos
-          package-name: rosgraph_monitor topic_stats_core topic_stats_shm
+          package-name: rosgraph_monitor topic_stats_core topic_stats_shm topic_stats_tracetools
           colcon-defaults: |
             {
               "build": {

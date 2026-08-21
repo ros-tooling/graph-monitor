@@ -19,6 +19,7 @@
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "rclcpp/logger.hpp"
 #include "rosgraph_monitor/config.hpp"
+#include "rosgraph_monitor/mutex_protected.hpp"
 
 namespace rosgraph_monitor
 {
@@ -37,27 +38,56 @@ struct NodeParameters
   }
 };
 
-/// @brief Describe parameters by name alone, for when nothing else about them is known.
-/// @details Listing is the only parameter call that does not have to name what it asks for,
-///   so it is the only one that works on a node whose parameters are not known in advance.
-///   A name says nothing about a parameter's type, so every descriptor is left unset, and there
-///   are no values to report.
-/// TODO(troy): describe_parameters and get_parameters will fill in the real types and values.
-/// @param names Response to list_parameters
-/// @return Descriptors carrying only the names, and no values
-NodeParameters parameters_from_names(const std::vector<std::string> & names);
+/// A request to issue once the lock has been released. Collected under the lock and
+/// dispatched outside it, because a client is free to answer synchronously on the calling
+/// thread, and its response handler takes the same lock.
+struct Call
+{
+  std::string node_name;
+  uint64_t generation;
+};
 
-/// @brief Pair a describe response with a get response into parallel lists.
-/// @details Both responses are positional against the names that were asked for, and neither
-///   value carries a name. A parameter removed between the two calls shortens one response but
-///   not the other, so anything past the shorter of the two is dropped rather than mispaired.
-///   Descriptors are authoritative for names.
-/// @param descriptors Response to describe_parameters, in request order
-/// @param values Response to get_parameters, in request order
-/// @return Parallel descriptor/value lists, of equal length
-NodeParameters pair_parameters(
-  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors,
-  const std::vector<rcl_interfaces::msg::ParameterValue> & values);
+struct Observation
+{
+  Observation(std::chrono::nanoseconds started, uint64_t generation)
+  : started(started)
+  , generation(generation)
+  {}
+
+  std::chrono::nanoseconds started;
+  /// Distinguishes this observation from any earlier one,
+  /// so a response arriving after its observation was abandoned can be distinguished.
+  uint64_t generation = 0;
+};
+
+class ObservationQueue
+{
+public:
+  ObservationQueue(std::chrono::milliseconds timeout, size_t max_concurrent);
+
+  bool request(const std::string & name);
+  void cancel(const std::string & name);
+  std::vector<std::string> expire(std::chrono::nanoseconds now);
+
+  bool can_start_new() const;
+  std::string pop_next();
+  uint64_t activate(const std::string & name, std::chrono::nanoseconds now);
+
+  // Calls actually sent out (?)
+  std::unordered_map<std::string, Observation> active_;
+
+  // Calls waiting to be sent. A pair for fast lookup vs ordering.
+  std::deque<std::string> pending_;
+
+private:
+  // To optimize lookups, duplicates ordered entries in pending_
+  std::unordered_set<std::string> pending_lookup_;
+
+  uint64_t next_generation_ = 1;
+
+  const std::chrono::milliseconds timeout_;
+  const size_t max_concurrent_;
+};
 
 /// @brief Pure interface providing the parameter service calls the collector needs.
 /// @details Abstracted for polymorphic dependency injection, to test without full ros graph.
@@ -80,14 +110,12 @@ public:
   virtual void forget(const std::string & node_name) = 0;
 };
 
-/// @brief Observes the parameters of nodes, a bounded number at a time.
+/// @brief Observes the parameters of nodes.
 ///
-/// Each node costs a service round trip, and there may be as many of them as there are nodes in
-/// the graph. This runs those requests without letting the number outstanding grow with the size
-/// of the graph, and without blocking the caller.
+/// Each node costs service round trips,
+/// This runs requests with a set pool of threads, without blocking the caller.
 ///
-/// Thread safe. Callbacks are never invoked while the internal lock is held, so the completion
-/// handler is free to call back into the collector.
+/// Thread safe for reentrance, callbacks may call the collector.
 class ParameterCollector
 {
 public:
@@ -124,34 +152,11 @@ public:
   size_t pending_count() const;
 
 private:
-  /// A request to issue once the lock has been released. Collected under the lock and
-  /// dispatched outside it, because a client is free to answer synchronously on the calling
-  /// thread, and its response handler takes the same lock.
-  struct Call
-  {
-    std::string node_name;
-    uint64_t generation;
-  };
+  /// @note Puts as many pending calls as can fit from queue into calls.
+  void start_next(ObservationQueue & queue, std::vector<Call> & calls);
 
-  struct Observation
-  {
-    std::chrono::nanoseconds started;
-    /// Distinguishes this observation from any earlier one of the same node, so a response
-    /// arriving after its observation was abandoned can be told apart from a current one.
-    uint64_t generation = 0;
-  };
-
-  /// @note Caller must hold mutex_. Appends the requests to issue after unlocking.
-  void start_next(std::vector<Call> & calls);
-  /// @note Caller must hold mutex_. Appends the request to issue after unlocking.
-  void begin(const std::string & node_name, std::vector<Call> & calls);
-  /// @brief Issue collected requests. Must be called with mutex_ released.
+  /// @brief Issue collected requests (from start_next)
   void dispatch(std::vector<Call> & calls);
-  /// @return Whether this response belongs to a live observation
-  /// @note Caller must hold mutex_
-  bool still_current(const std::string & node_name, uint64_t generation) const;
-  /// @note Caller must hold mutex_. Frees the node's slot.
-  void finish(const std::string & node_name);
 
   void on_names(const std::string & node_name, uint64_t generation, std::optional<std::vector<std::string>> names);
 
@@ -159,13 +164,8 @@ private:
   const CompleteCallback on_complete_;
   const NowFunc now_fn_;
   rclcpp::Logger logger_;
-  const Options options_;
 
-  mutable std::mutex mutex_;
-  std::unordered_map<std::string, Observation> active_;
-  std::deque<std::string> pending_;
-  std::unordered_set<std::string> queued_;
-  uint64_t next_generation_ = 1;
+  MutexProtected<ObservationQueue> queue_;
 };
 
 }  // namespace rosgraph_monitor

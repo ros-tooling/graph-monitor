@@ -28,29 +28,11 @@ using rcl_interfaces::msg::ParameterDescriptor;
 using rcl_interfaces::msg::ParameterType;
 using rcl_interfaces::msg::ParameterValue;
 using rosgraph_monitor::NodeParameters;
-using rosgraph_monitor::pair_parameters;
 using rosgraph_monitor::ParameterCollector;
-using rosgraph_monitor::parameters_from_names;
 using rosgraph_monitor::ParameterServiceClient;
 
 namespace
 {
-
-ParameterDescriptor descriptor(const std::string & name, uint8_t type = ParameterType::PARAMETER_INTEGER)
-{
-  ParameterDescriptor d;
-  d.name = name;
-  d.type = type;
-  return d;
-}
-
-ParameterValue int_value(int64_t v)
-{
-  ParameterValue value;
-  value.type = ParameterType::PARAMETER_INTEGER;
-  value.integer_value = v;
-  return value;
-}
 
 /// A parameter service whose responses are delivered by the test, not by a node.
 class FakeParameterService : public ParameterServiceClient
@@ -117,57 +99,6 @@ protected:
 };
 
 }  // namespace
-
-// ---------------------------------------------------------------------------
-// parameters_from_names
-// ---------------------------------------------------------------------------
-
-TEST(ParametersFromNamesTest, describes_each_name_with_an_unset_type)
-{
-  // Listing is all we have, and a name says nothing about a parameter's type.
-  const auto parameters = parameters_from_names({"gain", "rate"});
-  ASSERT_EQ(parameters.descriptors.size(), 2u);
-  EXPECT_EQ(parameters.descriptors[0].name, "gain");
-  EXPECT_EQ(parameters.descriptors[1].name, "rate");
-  for (const auto & d : parameters.descriptors) {
-    EXPECT_EQ(d.type, ParameterType::PARAMETER_NOT_SET);
-  }
-  EXPECT_TRUE(parameters.values.empty()) << "listing reveals no values";
-}
-
-TEST(ParametersFromNamesTest, no_names_describes_nothing)
-{
-  EXPECT_TRUE(parameters_from_names({}).empty());
-}
-
-// ---------------------------------------------------------------------------
-// pair_parameters
-// ---------------------------------------------------------------------------
-
-TEST(PairParametersTest, pairs_equal_length_responses)
-{
-  const auto paired = pair_parameters({descriptor("a"), descriptor("b")}, {int_value(1), int_value(2)});
-  ASSERT_EQ(paired.descriptors.size(), 2u);
-  ASSERT_EQ(paired.values.size(), 2u);
-  EXPECT_EQ(paired.descriptors[1].name, "b");
-  EXPECT_EQ(paired.values[1].integer_value, 2);
-}
-
-TEST(PairParametersTest, drops_the_tail_when_responses_disagree)
-{
-  // A parameter removed between the describe and the get shortens one response but not the
-  // other. Pairing past that point would attach a value to the wrong parameter.
-  const auto paired = pair_parameters({descriptor("a"), descriptor("b"), descriptor("c")}, {int_value(1)});
-  ASSERT_EQ(paired.descriptors.size(), 1u);
-  ASSERT_EQ(paired.values.size(), 1u);
-  EXPECT_EQ(paired.descriptors[0].name, "a");
-}
-
-TEST(PairParametersTest, empty_responses_pair_to_nothing)
-{
-  const auto paired = pair_parameters({}, {});
-  EXPECT_TRUE(paired.empty());
-}
 
 // ---------------------------------------------------------------------------
 // Observing a node

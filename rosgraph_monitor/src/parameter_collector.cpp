@@ -46,6 +46,7 @@ bool ObservationQueue::request(const std::string & name)
   }
   pending_.push_back(name);
   pending_lookup_.insert(name);
+  return true;
 }
 
 void ObservationQueue::cancel(const std::string & name)
@@ -166,7 +167,7 @@ void ParameterCollector::start_next(ObservationQueue & queue, std::vector<Call> 
       // Not reachable yet. Dropped rather than held, so it does not occupy a slot; the monitor
       // asks again on the next graph change if the node is still there.
       RCLCPP_DEBUG(logger_, "Parameter services for %s are not available yet", node_name.c_str());
-      return;
+      continue;
     }
     auto generation = queue.activate(node_name, now_fn_());
     calls.push_back({node_name, generation});

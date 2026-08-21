@@ -45,17 +45,12 @@ ParameterCollector::ParameterCollector(
   CompleteCallback on_complete,
   NowFunc now_fn,
   rclcpp::Logger logger,
-  Options options)
+  GraphMonitorConfiguration::ParameterObservation options)
 : client_(std::move(client))
 , on_complete_(std::move(on_complete))
 , now_fn_(std::move(now_fn))
 , logger_(logger)
 , options_(options)
-{}
-
-ParameterCollector::ParameterCollector(
-  std::shared_ptr<ParameterServiceClient> client, CompleteCallback on_complete, NowFunc now_fn, rclcpp::Logger logger)
-: ParameterCollector(std::move(client), std::move(on_complete), std::move(now_fn), logger, Options{})
 {}
 
 void ParameterCollector::request(const std::string & node_name)

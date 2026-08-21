@@ -18,6 +18,7 @@
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "rclcpp/logger.hpp"
+#include "rosgraph_monitor/config.hpp"
 
 namespace rosgraph_monitor
 {
@@ -90,36 +91,20 @@ public:
 class ParameterCollector
 {
 public:
-  struct Options
-  {
-    /// How many nodes may be observed at once. Each observation has at most one request
-    /// outstanding, so this also bounds in-flight service requests.
-    size_t max_concurrent = 4;
-    /// How long a single node's observation may take before it is abandoned. Without this a
-    /// node that never answers would hold its slot indefinitely.
-    std::chrono::nanoseconds timeout = std::chrono::seconds(10);
-  };
-
   /// @param node_name Node the parameters belong to
   /// @param parameters What was observed. Empty if the node reported no parameters.
   using CompleteCallback = std::function<void(const std::string & node_name, NodeParameters parameters)>;
 
   /// @brief Source of the current time, injected so tests can drive expiry directly.
   using NowFunc = std::function<std::chrono::nanoseconds()>;
+  using Options = GraphMonitorConfiguration::ParameterObservation;
 
   ParameterCollector(
     std::shared_ptr<ParameterServiceClient> client,
     CompleteCallback on_complete,
     NowFunc now_fn,
     rclcpp::Logger logger,
-    Options options);
-
-  /// @brief Construct with default options
-  ParameterCollector(
-    std::shared_ptr<ParameterServiceClient> client,
-    CompleteCallback on_complete,
-    NowFunc now_fn,
-    rclcpp::Logger logger);
+    Options options = {});
 
   /// @brief Ask for a node's parameters. Queued if already at capacity.
   /// @details A node already queued or in flight is ignored, so repeated discovery of the same

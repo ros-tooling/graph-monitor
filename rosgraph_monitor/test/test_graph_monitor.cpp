@@ -964,8 +964,8 @@ TEST_F(GraphMonitorTest, rosgraph_drops_parameter_query_for_a_departed_node)
 
 TEST_F(GraphMonitorTest, parameter_observation_limits_come_from_the_configuration)
 {
-  // Rebuild the monitor with a deliberately small cap and a parameter service that never
-  // answers, so the number of nodes it starts on is observable.
+  // Rebuild the monitor with a deliberately small cap and a parameter service that never answers,
+  // so the number of nodes it starts on is observable.
   auto blocked = std::make_shared<BlockingParameterService>();
   rosgraph_monitor::GraphMonitorConfiguration config;
   config.parameters.max_concurrent = 2;

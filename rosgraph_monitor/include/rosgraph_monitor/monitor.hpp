@@ -22,6 +22,7 @@
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
+#include "rosgraph_monitor/config.hpp"
 #include "rosgraph_monitor/event.hpp"
 #include "rosgraph_monitor/mutex_protected.hpp"
 #include "rosgraph_monitor/parameter_collector.hpp"
@@ -53,59 +54,6 @@ namespace rosgraph_monitor
 
 std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE]);
 std::string gid_to_str(const RosRmwGid & gid);
-
-struct GraphMonitorConfiguration
-{
-  std::string diagnostic_namespace{"rosgraph"};
-
-  struct NodeChecks
-  {
-    // Matching nodes will not be considered in any graph analysis
-    std::vector<std::string> ignore_prefixes;
-    // Downgrade ERROR to WARN for matching nodes when they are missing.
-    std::vector<std::string> warn_only_prefixes;
-  } nodes;
-
-  struct ContinuityChecks
-  {
-    // If set, don't perform any continuity checks
-    bool enable = true;
-    // These nodes don't count for subscriptions when reporting discontinuity
-    std::unordered_set<std::string> ignore_subscriber_nodes;
-    // Any topics of these types will be ignored entirely for continuity checks
-    std::unordered_set<std::string> ignore_topic_types;
-    // Any topics with these names will be ignored entirely for continuity checks
-    std::unordered_set<std::string> ignore_topic_names;
-  } continuity;
-
-  /// Read once, when the monitor is constructed: the collector is built from these, so
-  /// changing them on a live monitor has no effect.
-  struct ParameterObservation
-  {
-    // How many nodes may be observed at once
-    size_t max_concurrent = 4;
-    // How long one node's observation may take before it is abandoned
-    std::chrono::milliseconds timeout{10000};
-  } parameters;
-
-  struct TopicStatisticsChecks
-  {
-    // What fraction of the promised deadline the topic statistics may err by
-    // and still be considered compliant.
-    // For example if 0.1, then a deadline of 10 milliseconds will be considered OK
-    // if average measured interval is 9-11 milliseconds
-    // This equates to: expectation of 100Hz will be considered OK from 90.9-111.1Hz
-    float deadline_allowed_error = 0.1;
-    // For topics whose frequency is tracked, if new statistics are not received within this
-    // time frame then the statistic will be reported as stale with an ERROR.
-    std::chrono::milliseconds stale_timeout{3000};
-    // List of topics that must exist and have deadlines
-    std::unordered_set<std::string> mandatory_topics;
-    // List of topics that should not be considered for frequency checks
-    // (e.g. topics that are known to be misconfigured and not meeting their deadlines
-    std::unordered_set<std::string> ignore_topics;
-  } topic_statistics;
-};
 
 /// @brief Monitors the ROS application graph, providing diagnostics about its health.
 class RosGraphMonitor
@@ -158,15 +106,25 @@ protected:
     std::string name;
     bool missing = false;
     bool stale = false;
-    /// Descriptors and values as last observed. Empty until the collector reports them, and
-    /// left in place while a node is missing so a brief dropout does not blank the graph.
+    /// Descriptors and values as last observed.
+    /// Empty until collected, and left in place while a node is missing so a brief dropout does not blank the graph.
     NodeParameters params;
-    /// Whether the collector has reported on this node at all. A node with no parameters is
-    /// still observed, so this is not the same as params being empty. Cleared when the node
-    /// returns after going missing, since its parameters may have changed while it was away.
+    /// Whether the collector has reported on this node at all.
+    /// A node with no parameters is still observed, so this is not the same as params being empty.
+    /// Cleared when the node returns after going missing, since its parameters may have changed while it was away.
     bool params_observed = false;
 
     explicit NodeTracking(const std::string & name);
+  };
+
+  /// @brief Which nodes' parameter observations should change on a single graph update
+  struct NodeChanges
+  {
+    /// Present, but with no observation to show for it: newly seen, seen again after going
+    /// missing, or an earlier attempt that found the node's parameter services down.
+    std::vector<std::string> to_observe;
+    /// No longer present: any parameter observation for them should be abandoned
+    std::vector<std::string> departed;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time
@@ -228,16 +186,6 @@ protected:
   /// @param node_name
   /// @return Whether to ignore tracking the node
   bool ignore_node(const std::string & node_name, GraphTracking & graph);
-
-  /// @brief Which nodes' parameter observations should change on a single graph update
-  struct NodeChanges
-  {
-    /// Present, but with no observation to show for it: newly seen, seen again after going
-    /// missing, or an earlier attempt that found the node's parameter services down.
-    std::vector<std::string> to_observe;
-    /// No longer present: any parameter observation for them should be abandoned
-    std::vector<std::string> departed;
-  };
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names

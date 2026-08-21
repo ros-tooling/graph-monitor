@@ -12,7 +12,6 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "rclcpp/node.hpp"
 #include "rosgraph_monitor/monitor.hpp"
-#include "rosgraph_monitor/rclcpp_parameter_client.hpp"
 #include "rosgraph_monitor/rosgraph_monitor_generated_parameters.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_msgs/msg/graph.hpp"

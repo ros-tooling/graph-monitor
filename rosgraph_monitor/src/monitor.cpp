@@ -153,10 +153,6 @@ RosGraphMonitor::RosGraphMonitor(
 , graph_(GraphTracking{})
 , graph_change_callback_(change_callback)
 {
-  ParameterCollector::Options collector_options;
-  collector_options.max_concurrent = config_.parameters.max_concurrent;
-  collector_options.timeout = config_.parameters.timeout;
-
   parameter_collector_ = std::make_unique<ParameterCollector>(
     std::move(parameter_client),
     [this](const std::string & node_name, NodeParameters parameters) {
@@ -164,7 +160,7 @@ RosGraphMonitor::RosGraphMonitor(
     },
     [this]() { return std::chrono::nanoseconds(now_fn_().nanoseconds()); },
     logger_.get_child("parameters"),
-    collector_options);
+    config_.parameters);
 
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));

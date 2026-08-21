@@ -109,15 +109,6 @@ rosgraph_msgs::msg::QoSProfile to_msg(const rclcpp::QoS & qos_profile)
   return qos_msg;
 }
 
-rcl_interfaces::msg::ParameterDescriptor RosGraphMonitor::ParameterTracking::to_msg() const
-{
-  rcl_interfaces::msg::ParameterDescriptor param_msg;
-  param_msg.name = name;
-  // TODO(troy): Actual type info will be populated in future PR
-  param_msg.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
-  return param_msg;
-}
-
 RosGraphMonitor::NodeTracking::NodeTracking(const std::string & name)
 : name(name)
 {}
@@ -151,7 +142,7 @@ RosGraphMonitor::RosGraphMonitor(
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
   std::function<rclcpp::Time()> now_fn,
   rclcpp::Logger logger,
-  QueryParamsFunc query_params,
+  std::shared_ptr<ParameterServiceClient> parameter_client,
   GraphMonitorConfiguration config,
   GraphChangeCallback change_callback)
 : config_(config)
@@ -159,10 +150,18 @@ RosGraphMonitor::RosGraphMonitor(
 , node_graph_(node_graph)
 , logger_(logger)
 , graph_change_event_(node_graph->get_graph_event())
-, query_params_fn_(query_params)
 , graph_(GraphTracking{})
 , graph_change_callback_(change_callback)
 {
+  parameter_collector_ = std::make_unique<ParameterCollector>(
+    std::move(parameter_client),
+    [this](const std::string & node_name, NodeParameters parameters) {
+      on_node_parameters(node_name, std::move(parameters));
+    },
+    [this]() { return std::chrono::nanoseconds(now_fn_().nanoseconds()); },
+    logger_.get_child("parameters"),
+    config_.parameters);
+
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
 }
@@ -176,10 +175,6 @@ RosGraphMonitor::~RosGraphMonitor()
   update_event_.set();
 
   watch_thread_.join();
-
-  // Only safe once the watch thread is gone, since it owns this map. Dropping each future here
-  // joins its query thread, so this is also what keeps those threads from outliving us.
-  params_futures_.clear();
 }
 
 void RosGraphMonitor::update_graph()
@@ -187,17 +182,24 @@ void RosGraphMonitor::update_graph()
   const auto node_names = node_graph_->get_node_names();
   const auto topics_and_types = node_graph_->get_topic_names_and_types();
 
-  std::vector<std::string> new_nodes;
+  NodeChanges changes;
   {
     auto graph = graph_.lock();
-    new_nodes = track_node_updates(node_names, *graph);
+    changes = track_node_updates(node_names, *graph);
     track_endpoint_updates(topics_and_types, *graph);
   }
 
-  // Both of these reach back into the tracked state, so neither may run under the lock.
-  for (const auto & node_name : new_nodes) {
-    query_node_parameters(node_name);
+  // All of these reach back into the tracked state, so none may run under the lock.
+  // Nodes already queued or in flight are ignored by the collector, so re-asking for a node
+  // whose observation has not landed yet costs nothing.
+  for (const auto & node_name : changes.to_observe) {
+    parameter_collector_->request(node_name);
   }
+  for (const auto & node_name : changes.departed) {
+    parameter_collector_->cancel(node_name);
+  }
+  // Frees slots held by nodes that stopped answering mid-observation.
+  parameter_collector_->tick();
   notify_graph_change();
 }
 
@@ -216,10 +218,10 @@ bool RosGraphMonitor::ignore_node(const std::string & node_name, GraphTracking &
   return false;
 }
 
-std::vector<std::string> RosGraphMonitor::track_node_updates(
+RosGraphMonitor::NodeChanges RosGraphMonitor::track_node_updates(
   const std::vector<std::string> & observed_node_names, GraphTracking & graph)
 {
-  std::vector<std::string> new_nodes;
+  NodeChanges changes;
 
   // Mark all stale as base state
   for (auto & [node_name, tracking] : graph.nodes) {
@@ -236,7 +238,6 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
 
     if (inserted) {
       RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
-      new_nodes.push_back(node_name);
     } else {
       NodeTracking & tracking = it->second;
       tracking.stale = false;
@@ -244,7 +245,8 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
         RCLCPP_INFO(logger_, "Node %s came back", node_name.c_str());
         tracking.missing = false;
         graph.returned_nodes.insert(node_name);
-        new_nodes.push_back(node_name);
+        // Whatever it was running with before it left is no longer trustworthy.
+        tracking.params_observed = false;
       }
     }
   }
@@ -253,11 +255,16 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
     if (tracking.stale && !tracking.missing) {
       RCLCPP_WARN(logger_, "Node %s went missing", node_name.c_str());
       tracking.missing = true;
+      changes.departed.push_back(node_name);
       graph.returned_nodes.erase(node_name);
+    } else if (!tracking.missing && !tracking.params_observed) {
+      // Either we have not asked yet, or we asked and the node's parameter services were not
+      // up. Asking on every graph update is what eventually gets there.
+      changes.to_observe.push_back(node_name);
     }
   }
 
-  return new_nodes;
+  return changes;
 }
 
 std::optional<RosGraphMonitor::EndpointTrackingMap::iterator> RosGraphMonitor::add_publisher(
@@ -645,9 +652,10 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg)
     rosgraph_msgs::msg::Node node_msg;
     node_msg.name = node_name;
 
-    for (const auto & param : node_info.params) {
-      node_msg.parameters.push_back(param.to_msg());
-    }
+    // The message requires parameter_values to be empty or exactly parallel to parameters,
+    // which is what the collector reports. Listing alone yields no values, so it is empty.
+    node_msg.parameters = node_info.params.descriptors;
+    node_msg.parameter_values = node_info.params.values;
 
     // Add publishers for this node
     for (auto & [gid, tracking] : graph.publishers) {
@@ -677,38 +685,28 @@ void RosGraphMonitor::notify_graph_change()
   }
 }
 
-void RosGraphMonitor::query_node_parameters(const std::string & node_name)
+void RosGraphMonitor::on_node_parameters(const std::string & node_name, NodeParameters parameters)
 {
-  // Non-blocking async call for parameter query. Hold onto the future to track completion.
-  params_futures_[node_name] = query_params_fn_(
-    node_name,
-    [this, node_name_copy = std::string(node_name)](const rcl_interfaces::msg::ListParametersResult & result) {
-      RCLCPP_INFO(logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(), result.names.size());
+  RCLCPP_DEBUG(logger_, "Observed %zu parameters for node %s", parameters.descriptors.size(), node_name.c_str());
 
-      bool have_params = false;
-      {
-        // This runs on the query's own thread, while the watch thread may be rebuilding nodes_.
-        auto graph = graph_.lock();
+  bool changed = false;
+  {
+    // Runs on whichever thread delivered the responses, while the watch thread may be
+    // rebuilding the graph.
+    auto graph = graph_.lock();
+    auto it = graph->nodes.find(node_name);
+    if (it == graph->nodes.end()) {
+      // The node left the graph between the request and the response.
+      return;
+    }
+    changed = it->second.params.descriptors != parameters.descriptors || it->second.params.values != parameters.values;
+    it->second.params = std::move(parameters);
+    it->second.params_observed = true;
+  }
 
-        auto it = graph->nodes.find(node_name_copy);
-        if (it == graph->nodes.end()) {
-          RCLCPP_WARN(logger_, "Node %s not found in tracking map", node_name_copy.c_str());
-          return;
-        }
-        auto & tracking = it->second;
-        tracking.params.clear();
-        tracking.params.reserve(result.names.size());
-        for (const auto & param_name : result.names) {
-          tracking.params.push_back(
-            ParameterTracking{param_name, rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
-        }
-        have_params = !tracking.params.empty();
-      }
-
-      if (have_params) {
-        notify_graph_change();
-      }
-    });
+  if (changed) {
+    notify_graph_change();
+  }
 }
 
 }  // namespace rosgraph_monitor

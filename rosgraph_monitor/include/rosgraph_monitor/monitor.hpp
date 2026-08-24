@@ -28,6 +28,7 @@
 #include "rclcpp/time.hpp"
 #include "rosgraph_monitor/event.hpp"
 #include "rosgraph_monitor/mutex_protected.hpp"
+#include "rosgraph_monitor/parameter_collector.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_msgs/msg/graph.hpp"
 #include "rosgraph_msgs/msg/qo_s_profile.hpp"
@@ -150,23 +151,25 @@ public:
 protected:
   /* Types */
 
-  struct ParameterTracking
-  {
-    std::string name;
-    uint8_t type;
-
-    rcl_interfaces::msg::ParameterDescriptor to_msg() const;
-  };
-
   /// @brief Keeps flags for tracking observed nodes over time
   struct NodeTracking
   {
     std::string name;
     bool missing = false;
     bool stale = false;
-    std::vector<ParameterTracking> params;
+    // nullopt until a successful observation is made, differentiating "no params" from "don't know"
+    std::optional<NodeParameters> params;
 
     explicit NodeTracking(const std::string & name);
+  };
+
+  /// @brief changes from a single graph update
+  struct NodeChanges
+  {
+    /// Newly seen, seen again after going missing, or an earlier attempt failed
+    std::vector<std::string> to_observe;
+    /// No longer present, any ongoing observations should be abandoned
+    std::vector<std::string> departed;
   };
 
   /// @brief Keeps aggregate info about a topic as a whole over time
@@ -231,9 +234,8 @@ protected:
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_node_names
-  /// @return Names of newly discovered nodes, whose parameters the caller should query
-  std::vector<std::string> track_node_updates(
-    const std::vector<std::string> & observed_node_names, GraphTracking & graph);
+  /// @return Which nodes need observing and which have left the graph
+  NodeChanges track_node_updates(const std::vector<std::string> & observed_node_names, GraphTracking & graph);
 
   /// @brief Check current observed state against our tracked state, updating tracking info
   /// @param observed_topics_and_types
@@ -281,7 +283,7 @@ protected:
   std::unordered_map<std::string, std::shared_future<void>> params_futures_;
 
   /* Three different threads read and write to this state:
-   * - the watch thread reubuilding the graph
+   * - the watch thread rebuilding the graph
    * - eaach parameter query's thread writing back its results
    * - the caller's thread reading via evaluate() or fill_rosgraph_msg()
    *

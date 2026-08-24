@@ -109,15 +109,6 @@ rosgraph_msgs::msg::QoSProfile to_msg(const rclcpp::QoS & qos_profile)
   return qos_msg;
 }
 
-rcl_interfaces::msg::ParameterDescriptor RosGraphMonitor::ParameterTracking::to_msg() const
-{
-  rcl_interfaces::msg::ParameterDescriptor param_msg;
-  param_msg.name = name;
-  // TODO(troy): Actual type info will be populated in future PR
-  param_msg.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
-  return param_msg;
-}
-
 RosGraphMonitor::NodeTracking::NodeTracking(const std::string & name)
 : name(name)
 {}
@@ -187,15 +178,15 @@ void RosGraphMonitor::update_graph()
   const auto node_names = node_graph_->get_node_names();
   const auto topics_and_types = node_graph_->get_topic_names_and_types();
 
-  std::vector<std::string> new_nodes;
+  NodeChanges changes;
   {
     auto graph = graph_.lock();
-    new_nodes = track_node_updates(node_names, *graph);
+    changes = track_node_updates(node_names, *graph);
     track_endpoint_updates(topics_and_types, *graph);
   }
 
   // Both of these reach back into the tracked state, so neither may run under the lock.
-  for (const auto & node_name : new_nodes) {
+  for (const auto & node_name : changes.to_observe) {
     query_node_parameters(node_name);
   }
   notify_graph_change();
@@ -216,10 +207,10 @@ bool RosGraphMonitor::ignore_node(const std::string & node_name, GraphTracking &
   return false;
 }
 
-std::vector<std::string> RosGraphMonitor::track_node_updates(
+RosGraphMonitor::NodeChanges RosGraphMonitor::track_node_updates(
   const std::vector<std::string> & observed_node_names, GraphTracking & graph)
 {
-  std::vector<std::string> new_nodes;
+  NodeChanges changes;
 
   // Mark all stale as base state
   for (auto & [node_name, tracking] : graph.nodes) {
@@ -236,7 +227,6 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
 
     if (inserted) {
       RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
-      new_nodes.push_back(node_name);
     } else {
       NodeTracking & tracking = it->second;
       tracking.stale = false;
@@ -244,7 +234,7 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
         RCLCPP_INFO(logger_, "Node %s came back", node_name.c_str());
         tracking.missing = false;
         graph.returned_nodes.insert(node_name);
-        new_nodes.push_back(node_name);
+        tracking.params.reset();
       }
     }
   }
@@ -253,11 +243,14 @@ std::vector<std::string> RosGraphMonitor::track_node_updates(
     if (tracking.stale && !tracking.missing) {
       RCLCPP_WARN(logger_, "Node %s went missing", node_name.c_str());
       tracking.missing = true;
+      changes.departed.push_back(node_name);
       graph.returned_nodes.erase(node_name);
+    } else if (!tracking.missing && !tracking.params.has_value()) {
+      changes.to_observe.push_back(node_name);
     }
   }
 
-  return new_nodes;
+  return changes;
 }
 
 std::optional<RosGraphMonitor::EndpointTrackingMap::iterator> RosGraphMonitor::add_publisher(
@@ -645,8 +638,9 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg)
     rosgraph_msgs::msg::Node node_msg;
     node_msg.name = node_name;
 
-    for (const auto & param : node_info.params) {
-      node_msg.parameters.push_back(param.to_msg());
+    if (node_info.params) {
+      node_msg.parameters = node_info.params->descriptors;
+      node_msg.parameter_values = node_info.params->values;
     }
 
     // Add publishers for this node
@@ -696,13 +690,15 @@ void RosGraphMonitor::query_node_parameters(const std::string & node_name)
           return;
         }
         auto & tracking = it->second;
-        tracking.params.clear();
-        tracking.params.reserve(result.names.size());
-        for (const auto & param_name : result.names) {
-          tracking.params.push_back(
-            ParameterTracking{param_name, rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET});
+        tracking.params.reset();
+        tracking.params.emplace();
+
+        tracking.params->descriptors.resize(result.names.size());
+        for (size_t i = 0; i < result.names.size(); i++) {
+          tracking.params->descriptors[i].name = result.names[i];
+          tracking.params->descriptors[i].type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
         }
-        have_params = !tracking.params.empty();
+        have_params = !tracking.params->empty();
       }
 
       if (have_params) {

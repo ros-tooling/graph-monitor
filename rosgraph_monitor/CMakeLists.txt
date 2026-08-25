@@ -27,6 +27,7 @@ endif()
 add_library(${PROJECT_NAME} SHARED
   src/event.cpp
   src/monitor.cpp
+  src/rclcpp_parameter_client.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

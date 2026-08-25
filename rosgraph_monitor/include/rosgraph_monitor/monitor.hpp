@@ -5,7 +5,6 @@
 #define ROSGRAPH_MONITOR__MONITOR_HPP_
 
 #include <functional>
-#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -35,11 +34,6 @@
 #include "rosgraph_msgs/msg/topic.hpp"
 
 typedef std::array<uint8_t, RMW_GID_STORAGE_SIZE> RosRmwGid;
-
-typedef std::shared_future<void> QueryParamsReturnType;
-typedef std::function<QueryParamsReturnType(
-  const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback)>
-  QueryParamsFunc;
 
 // Optional trigger for monitor to call, to alert owner of updates to the graph
 typedef std::function<void(rosgraph_msgs::msg::Graph &)> GraphChangeCallback;
@@ -115,12 +109,12 @@ public:
   /// @param now_fn Function to fetch the current time as defined in the owning context
   /// @param logger
   /// @param config Includes/excludes the entities to care about in diagnostic reporting
-  /// @param query_params Function to query parameters of a node by name
+  /// @param parameter_client Interface to query parameters of nodes by name
   RosGraphMonitor(
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
     std::function<rclcpp::Time()> now_fn,
     rclcpp::Logger logger,
-    QueryParamsFunc query_params,
+    std::shared_ptr<ParameterServiceClient> parameter_client,
     GraphMonitorConfiguration config = GraphMonitorConfiguration{},
     GraphChangeCallback change_callback = GraphChangeCallback());
 
@@ -258,6 +252,10 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
+  /// @brief Record parameters the collector has observed for a node
+  /// @note Runs on whichever thread delivered the parameter responses
+  void on_node_parameters(const std::string & node_name, std::optional<std::vector<std::string>> parameter_names);
+
   /// @brief Query parameters for a newly discovered node
   /// @param node_name The name of the node to query parameters for
   void query_node_parameters(const std::string & node_name);
@@ -279,8 +277,7 @@ protected:
   std::thread watch_thread_;
   Event update_event_;
 
-  const QueryParamsFunc query_params_fn_;
-  std::unordered_map<std::string, std::shared_future<void>> params_futures_;
+  std::shared_ptr<ParameterServiceClient> parameter_client_;
 
   /* Three different threads read and write to this state:
    * - the watch thread rebuilding the graph

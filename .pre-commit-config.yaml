@@ -10,7 +10,7 @@ repos:
       - id: dco-sign-off
 
   - repo: https://github.com/polymathrobotics/polymath_code_standard
-    rev: v2.4.0
+    rev: v2.5.0
     hooks:
       # Basic checks and fixes that apply to any text file and the git repository itself
       - id: polymath-general

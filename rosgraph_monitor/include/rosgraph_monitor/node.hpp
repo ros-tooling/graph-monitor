@@ -19,8 +19,6 @@
 namespace rosgraph_monitor
 {
 
-constexpr int SERVICE_TIMEOUT_S = 5;
-
 class Node : public rclcpp::Node
 {
 private:
@@ -34,8 +32,6 @@ protected:
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg);
   void publish_diagnostics();
   void publish_rosgraph(rosgraph_msgs::msg::Graph rosgraph_msg);
-  QueryParamsReturnType query_params(
-    const std::string & node_name, std::function<void(const rcl_interfaces::msg::ListParametersResult &)> callback);
 
   rosgraph_monitor::ParamListener param_listener_;
   rosgraph_monitor::Params params_;

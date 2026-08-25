@@ -185,6 +185,9 @@ void RosGraphMonitor::update_graph()
   for (const auto & node_name : changes.to_observe) {
     query_node_parameters(node_name);
   }
+  for (const auto & node_name : changes.departed) {
+    parameter_client_->forget(node_name);
+  }
   notify_graph_change();
 }
 

@@ -18,38 +18,43 @@ template <typename T, typename Mutex = std::mutex>
 class MutexProtected
 {
 public:
-  // RAII guard for accessing the protected data
-  class Guard
+  /// @brief RAII guard for accessing the protected data, holds the lock for its lifetime.
+  /// @tparam Value T for mutable access, const T for read-only access.
+  template <typename Value>
+  class GuardT
   {
   public:
-    Guard(T & value, Mutex & mtx)
+    GuardT(Value & value, Mutex & mtx)
     : lock_(mtx)
     , value_(value)
     {}
 
     // Access via pointer-style dereference
-    T * operator->()
+    Value * operator->() const
     {
       return &value_;
     }
 
-    T & operator*()
+    Value & operator*() const
     {
       return value_;
     }
 
     // Non-copyable
-    Guard(const Guard &) = delete;
-    Guard & operator=(const Guard &) = delete;
+    GuardT(const GuardT &) = delete;
+    GuardT & operator=(const GuardT &) = delete;
 
     // Movable
-    Guard(Guard &&) = default;
-    Guard & operator=(Guard &&) = default;
+    GuardT(GuardT &&) = default;
+    GuardT & operator=(GuardT &&) = default;
 
   private:
     std::unique_lock<Mutex> lock_;
-    T & value_;
+    Value & value_;
   };
+
+  using Guard = GuardT<T>;
+  using ConstGuard = GuardT<const T>;
 
   /// @brief No default constructor, always uses the variadic template
   MutexProtected() = delete;
@@ -72,6 +77,12 @@ public:
   Guard lock()
   {
     return Guard(value_, mutex_);
+  }
+
+  // Get RAII read-only access to the protected data
+  ConstGuard lock() const
+  {
+    return ConstGuard(value_, mutex_);
   }
 
 private:

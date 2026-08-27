@@ -33,6 +33,7 @@ public:
   virtual ~ParameterServiceClient() = default;
 
   using NamesCallback = std::function<void(std::optional<std::vector<std::string>>)>;
+  using DescriptorsCallback = std::function<void(std::optional<std::vector<rcl_interfaces::msg::ParameterDescriptor>>)>;
 
   /// @return Whether the node is currently reachable.
   /// Check before starting, so an unreachable node does not occupy a concurrency slot waiting for a response.
@@ -41,6 +42,11 @@ public:
   /// @brief Get all parameter names from the node, calling callback when complete.
   /// @return Immediately. The callback is always called eventually, with a std::nullopt on failure.
   virtual void list_parameters(const std::string & node_name, NamesCallback callback) = 0;
+
+  /// @brief Get descriptors for the named parameters of the node, calling callback when complete.
+  /// @return Immediately. The callback is always called eventually, with a std::nullopt on failure.
+  virtual void describe_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback) = 0;
 
   /// @brief Drop any client state held for a node that has gone away.
   virtual void forget(const std::string & node_name) = 0;

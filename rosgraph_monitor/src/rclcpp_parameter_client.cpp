@@ -56,6 +56,21 @@ void RclcppParameterServiceClient::list_parameters(const std::string & node_name
     });
 }
 
+void RclcppParameterServiceClient::describe_parameters(
+  const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback)
+{
+  client_for(node_name)->describe_parameters(
+    names, [callback](std::shared_future<std::vector<rcl_interfaces::msg::ParameterDescriptor>> future) {
+      try {
+        callback(future.get());
+      } catch (const std::exception &) {
+        // The node went away, or the call was interrupted. Either way there is nothing to
+        // report, and the collector treats a failure the same as an absent node.
+        callback(std::nullopt);
+      }
+    });
+}
+
 void RclcppParameterServiceClient::forget(const std::string & node_name)
 {
   auto clients = clients_.lock();

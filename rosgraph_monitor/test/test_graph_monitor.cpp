@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -214,6 +215,41 @@ struct Endpoint
   }
 };
 
+/// @return One descriptor per name, each carrying `type`.
+static std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors_named(
+  const std::vector<std::string> & names, uint8_t type)
+{
+  std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
+  descriptors.reserve(names.size());
+  for (const auto & name : names) {
+    rcl_interfaces::msg::ParameterDescriptor descriptor;
+    descriptor.name = name;
+    descriptor.type = type;
+    descriptors.push_back(std::move(descriptor));
+  }
+  return descriptors;
+}
+
+/// @return The names of each descriptor, in order.
+static std::vector<std::string> descriptor_names(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors)
+{
+  std::vector<std::string> names;
+  names.reserve(descriptors.size());
+  for (const auto & descriptor : descriptors) {
+    names.push_back(descriptor.name);
+  }
+  return names;
+}
+
+/// @return Whether every descriptor carries `type`, false if there are none.
+static bool all_typed(const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, uint8_t type)
+{
+  return !descriptors.empty() && std::all_of(descriptors.begin(), descriptors.end(), [type](const auto & descriptor) {
+    return descriptor.type == type;
+  });
+}
+
 /// Answers parameter queries straight from the mocked graph, on the calling thread.
 /// Names come from MockedNode, which is enough to see the monitor carry them into the graph message.
 /// A node listed in `unreachable` has no parameter services up yet.
@@ -235,6 +271,12 @@ public:
     callback(names_for_(node_name));
   }
 
+  void describe_parameters(
+    const std::string &, const std::vector<std::string> & names, DescriptorsCallback callback) override
+  {
+    callback(descriptors_named(names, described_type));
+  }
+
   void forget(const std::string & node_name) override
   {
     std::lock_guard<std::mutex> lock(mutex);
@@ -250,6 +292,8 @@ public:
   std::mutex mutex;
   std::set<std::string> unreachable;
   std::set<std::string> forgotten;
+  /// The type every described parameter is reported as.
+  uint8_t described_type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
 
 private:
   std::function<std::vector<std::string>(const std::string &)> names_for_;
@@ -273,6 +317,15 @@ public:
     pending_[node_name] = std::move(callback);
   }
 
+  void describe_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback) override
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    describe_starts_[node_name]++;
+    described_names_[node_name] = names;
+    pending_describes_[node_name] = std::move(callback);
+  }
+
   void forget(const std::string & node_name) override
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -291,6 +344,22 @@ public:
   void fail(const std::string & node_name)
   {
     if (auto callback = take(node_name)) {
+      callback(std::nullopt);
+    }
+  }
+
+  /// Delivers `descriptors` as the result of the outstanding describe for `node_name`.
+  void answer_describe(const std::string & node_name, std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors)
+  {
+    if (auto callback = take_describe(node_name)) {
+      callback(std::move(descriptors));
+    }
+  }
+
+  /// Reports the outstanding describe for `node_name` as failed.
+  void fail_describe(const std::string & node_name)
+  {
+    if (auto callback = take_describe(node_name)) {
       callback(std::nullopt);
     }
   }
@@ -321,6 +390,22 @@ public:
     return it == starts_.end() ? 0 : it->second;
   }
 
+  /// @return How many describes have been started for `node_name`.
+  size_t describe_start_count(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = describe_starts_.find(node_name);
+    return it == describe_starts_.end() ? 0 : it->second;
+  }
+
+  /// @return The names the most recent describe for `node_name` asked about.
+  std::vector<std::string> described_names(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = described_names_.find(node_name);
+    return it == described_names_.end() ? std::vector<std::string>{} : it->second;
+  }
+
   /// @return Whether `node_name` has been forgotten.
   bool forgotten(const std::string & node_name)
   {
@@ -342,9 +427,25 @@ private:
     return callback;
   }
 
+  /// @return The outstanding describe's callback for `node_name`, removing it. Empty if there is none.
+  DescriptorsCallback take_describe(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = pending_describes_.find(node_name);
+    if (it == pending_describes_.end()) {
+      return DescriptorsCallback();
+    }
+    DescriptorsCallback callback = std::move(it->second);
+    pending_describes_.erase(it);
+    return callback;
+  }
+
   std::mutex mutex_;
   std::map<std::string, NamesCallback> pending_;
   std::map<std::string, size_t> starts_;
+  std::map<std::string, DescriptorsCallback> pending_describes_;
+  std::map<std::string, size_t> describe_starts_;
+  std::map<std::string, std::vector<std::string>> described_names_;
   std::set<std::string> forgotten_;
 };
 
@@ -1034,7 +1135,8 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
   // The parameter query is async, so we need to wait for it to complete
   auto rosgraph_msg = await_graphmon_msg_until(
     [](const rosgraph_msgs::msg::Graph & msg) {
-      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
+      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2 &&
+             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
     },
     std::chrono::milliseconds(500),
     "Timed out waiting for parameters to be populated");
@@ -1051,9 +1153,9 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
   }
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
 
-  // Listing gives names and nothing else, so the types stay unset and there are no values.
+  // Describing gives the types the mock reports, and no values.
   for (const auto & descriptor : node.parameters) {
-    EXPECT_EQ(descriptor.type, rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET);
+    EXPECT_EQ(descriptor.type, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
   }
   EXPECT_TRUE(node.parameter_values.empty()) << "parameter_values is empty until values are read";
 }
@@ -1260,4 +1362,129 @@ TEST_F(GraphMonitorTest, an_answer_after_destruction_is_safe)
   graphmon_.reset();
   // The done callback owns everything it touches.
   blocking->answer("/stuck", {"param1"});
+}
+
+TEST_F(GraphMonitorTest, names_receipt_requests_descriptors)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"typed"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/typed") == 1; }));
+
+  blocking->answer("/typed", {"param1", "param2"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/typed") == 1; }))
+    << "Recording parameter names did not start a descriptor query";
+  EXPECT_THAT(blocking->described_names("/typed"), testing::ElementsAre("param1", "param2"));
+}
+
+TEST_F(GraphMonitorTest, descriptor_response_updates_types_and_publishes)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"typed"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/typed") == 1; }));
+  blocking->answer("/typed", {"param1"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/typed") == 1; }));
+
+  // No further graph event follows, so only the describe response can publish these types.
+  blocking->answer_describe(
+    "/typed", descriptors_named({"param1"}, rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE));
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 &&
+             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE);
+    },
+    kGenerousWait,
+    "Timed out waiting for the described types to be published");
+  EXPECT_THAT(descriptor_names(msg.nodes.front().parameters), testing::ElementsAre("param1"));
+
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "The graph was published again after the types arrived";
+}
+
+TEST(ReconcileDescriptors, a_relist_preserves_known_types)
+{
+  using rcl_interfaces::msg::ParameterType;
+  // A re-list of a fully observed node is not reachable through the monitor's public behavior:
+  // names are queried once per successful observation, and a node that returns from missing
+  // drops its observation. The reconcile is tested at its own interface instead.
+  const auto recorded = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_STRING);
+
+  const auto reconciled = rosgraph_monitor::reconcile_descriptors(recorded, {"param2", "param3"});
+
+  ASSERT_EQ(reconciled.size(), 2u);
+  EXPECT_EQ(reconciled[0].name, "param2");
+  EXPECT_EQ(reconciled[0].type, ParameterType::PARAMETER_STRING) << "A re-listed name lost its known type";
+  EXPECT_EQ(reconciled[1].name, "param3");
+  EXPECT_EQ(reconciled[1].type, ParameterType::PARAMETER_NOT_SET);
+}
+
+TEST_F(GraphMonitorTest, a_failed_describe_leaves_names_visible_and_retries)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"flaky_describe"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/flaky_describe") == 1; }));
+  blocking->answer("/flaky_describe", {"param1"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/flaky_describe") == 1; }));
+
+  auto names_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 &&
+             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET);
+    },
+    kGenerousWait,
+    "Timed out waiting for the names of a node whose descriptors are outstanding");
+  EXPECT_THAT(descriptor_names(names_msg.nodes.front().parameters), testing::ElementsAre("param1"));
+
+  blocking->fail_describe("/flaky_describe");
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/flaky_describe") == 2; }))
+    << "A failed describe was not retried";
+
+  blocking->answer_describe(
+    "/flaky_describe", descriptors_named({"param1"}, rcl_interfaces::msg::ParameterType::PARAMETER_STRING));
+  auto typed_msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 &&
+             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_STRING);
+    },
+    kGenerousWait,
+    "Timed out waiting for the types from the retried describe");
+  EXPECT_THAT(descriptor_names(typed_msg.nodes.front().parameters), testing::ElementsAre("param1"));
+}
+
+TEST_F(GraphMonitorTest, departure_cancels_descriptor_queries)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"leaving"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/leaving") == 1; }));
+  blocking->answer("/leaving", {"param1"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/leaving") == 1; }));
+
+  set_node_names({});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->forgotten("/leaving"); }))
+    << "A departed node's client state was not dropped";
+
+  drain_graphmon_msgs();
+  blocking->answer_describe(
+    "/leaving", descriptors_named({"param1"}, rcl_interfaces::msg::ParameterType::PARAMETER_STRING));
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "A cancelled describe's response was recorded";
+}
+
+TEST_F(GraphMonitorTest, no_descriptor_query_for_a_node_with_no_parameters)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"bare"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/bare") == 1; }));
+
+  blocking->answer("/bare", {});
+  EXPECT_FALSE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/bare") > 0; }, kSettle))
+    << "A node with no parameters had its descriptors queried";
 }

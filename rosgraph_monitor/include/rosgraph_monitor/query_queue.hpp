@@ -4,20 +4,22 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include "rosgraph_monitor/event.hpp"
+#include "rosgraph_monitor/mutex_protected.hpp"
 
 namespace rosgraph_monitor
 {
@@ -60,11 +62,8 @@ public:
   /// Stops and joins the worker thread.
   ~QueryQueue()
   {
-    {
-      std::lock_guard<std::mutex> lock(mailbox_->mutex);
-      mailbox_->stop = true;
-    }
-    wake();
+    stop_.store(true);
+    mailbox_->arrived.set();
     worker_.join();
   }
 
@@ -76,13 +75,13 @@ public:
   void request(const std::string & key)
   {
     {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      if (is_pending(key)) {
+      auto state = state_.lock();
+      if (is_pending(*state, key)) {
         return;
       }
-      waiting_.push_back(key);
+      state->waiting.push_back(key);
     }
-    wake();
+    mailbox_->arrived.set();
   }
 
   /// @brief Drops `key` from the queue and abandons any attempt in flight for it.
@@ -90,26 +89,27 @@ public:
   void cancel(const std::string & key)
   {
     {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      waiting_.erase(std::remove(waiting_.begin(), waiting_.end(), key), waiting_.end());
-      in_flight_.erase(key);
-      retry_at_.erase(key);
+      auto state = state_.lock();
+      auto & waiting = state->waiting;
+      waiting.erase(std::remove(waiting.begin(), waiting.end(), key), waiting.end());
+      state->in_flight.erase(key);
+      state->retry_at.erase(key);
     }
-    wake();
+    mailbox_->arrived.set();
   }
 
   /// @return Number of keys not in flight: queued, or awaiting retry.
   size_t waiting_count() const
   {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    return waiting_.size() + retry_at_.size();
+    const auto state = state_.lock();
+    return state->waiting.size() + state->retry_at.size();
   }
 
   /// @return Number of attempts in flight.
   size_t in_flight_count() const
   {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    return in_flight_.size();
+    const auto state = state_.lock();
+    return state->in_flight.size();
   }
 
 private:
@@ -131,52 +131,49 @@ private:
     std::optional<Result> result;
   };
 
-  /// Completions and wakeups. Kept alive by every done callback.
-  struct Mailbox
+  /// Every key the queue is working on, and the generation counter that stamps new attempts.
+  struct State
   {
-    std::mutex mutex;
-    std::condition_variable signal;
-    std::vector<Completion> completions;
-    /// Set by any producer, cleared by the worker each pass.
-    bool wake = false;
-    bool stop = false;
+    std::deque<std::string> waiting;
+    std::unordered_map<std::string, Attempt> in_flight;
+    std::unordered_map<std::string, TimePoint> retry_at;
+    uint64_t last_generation = 0;
   };
 
-  /// Wakes the worker for a fresh pass.
-  void wake()
+  /// Completions and the signal that one arrived. Kept alive by every done callback.
+  struct Mailbox
   {
-    {
-      std::lock_guard<std::mutex> lock(mailbox_->mutex);
-      mailbox_->wake = true;
-    }
-    mailbox_->signal.notify_all();
-  }
+    MutexProtected<std::vector<Completion>> completions{std::vector<Completion>{}};
+    Event arrived;
+  };
 
   /// Dispatches attempts, applies completions, and delivers results, until stopped.
   void run()
   {
     while (true) {
+      // Clearing before the stop check keeps a stop signalled mid-pass from being swallowed.
+      mailbox_->arrived.check_and_clear();
+      if (stop_.load()) {
+        return;
+      }
+
       std::vector<Completion> completions;
       {
-        std::lock_guard<std::mutex> lock(mailbox_->mutex);
-        if (mailbox_->stop) {
-          return;
-        }
-        mailbox_->wake = false;
-        completions.swap(mailbox_->completions);
+        auto arrivals = mailbox_->completions.lock();
+        completions.swap(*arrivals);
       }
 
       std::vector<std::pair<std::string, Result>> deliveries;
       std::vector<std::pair<std::string, Done>> starts;
       std::optional<TimePoint> deadline;
       {
-        std::lock_guard<std::mutex> lock(state_mutex_);
+        auto state = state_.lock();
         const TimePoint now = Clock::now();
-        deliveries = settle(std::move(completions), now);
-        retry_timed_out(now);
-        promote_due_retries(now);
-        starts = fill_slots(now);
-        deadline = next_deadline();
+        deliveries = settle(*state, std::move(completions), now);
+        retry_timed_out(*state, now);
+        promote_due_retries(*state, now);
+        starts = fill_slots(*state, now);
+        deadline = next_deadline(*state);
       }
 
       for (auto & delivery : deliveries) {
@@ -186,80 +183,79 @@ private:
         start_call_(start.first, std::move(start.second));
       }
 
-      std::unique_lock<std::mutex> lock(mailbox_->mutex);
-      const auto woken = [this] { return mailbox_->wake; };
       if (deadline) {
-        mailbox_->signal.wait_until(lock, *deadline, woken);
+        mailbox_->arrived.wait_until(*deadline);
       } else {
-        mailbox_->signal.wait(lock, woken);
+        mailbox_->arrived.wait();
       }
     }
   }
 
-  /// @return Whether `key` is queued, in flight, or awaiting retry. Call with `state_mutex_` held.
-  bool is_pending(const std::string & key) const
+  /// @return Whether `key` is queued, in flight, or awaiting retry.
+  static bool is_pending(const State & state, const std::string & key)
   {
-    return in_flight_.count(key) != 0 || retry_at_.count(key) != 0 ||
-           std::find(waiting_.begin(), waiting_.end(), key) != waiting_.end();
+    return state.in_flight.count(key) != 0 || state.retry_at.count(key) != 0 ||
+           std::find(state.waiting.begin(), state.waiting.end(), key) != state.waiting.end();
   }
 
-  /// @brief Applies completions, scheduling a retry for each failure. Call with `state_mutex_` held.
+  /// @brief Applies completions, scheduling a retry for each failure.
   /// @details A completion that does not match the current attempt for its key is dropped.
   /// @return The successful results, to deliver with no lock held.
-  std::vector<std::pair<std::string, Result>> settle(std::vector<Completion> completions, TimePoint now)
+  std::vector<std::pair<std::string, Result>> settle(
+    State & state, std::vector<Completion> completions, TimePoint now) const
   {
     std::vector<std::pair<std::string, Result>> deliveries;
     for (auto & completion : completions) {
-      const auto attempt = in_flight_.find(completion.key);
-      if (attempt == in_flight_.end() || attempt->second.generation != completion.generation) {
+      const auto attempt = state.in_flight.find(completion.key);
+      if (attempt == state.in_flight.end() || attempt->second.generation != completion.generation) {
         continue;
       }
-      in_flight_.erase(attempt);
+      state.in_flight.erase(attempt);
       if (completion.result) {
         deliveries.emplace_back(completion.key, std::move(*completion.result));
       } else {
-        retry_at_[completion.key] = now + options_.retry_delay;
+        state.retry_at[completion.key] = now + options_.retry_delay;
       }
     }
     return deliveries;
   }
 
-  /// Abandons every attempt past its timeout and schedules a retry for it. Call with `state_mutex_` held.
-  void retry_timed_out(TimePoint now)
+  /// Abandons every attempt past its timeout and schedules a retry for it.
+  void retry_timed_out(State & state, TimePoint now) const
   {
-    for (auto attempt = in_flight_.begin(); attempt != in_flight_.end();) {
+    for (auto attempt = state.in_flight.begin(); attempt != state.in_flight.end();) {
       if (attempt->second.timeout_at <= now) {
-        retry_at_[attempt->first] = now + options_.retry_delay;
-        attempt = in_flight_.erase(attempt);
+        state.retry_at[attempt->first] = now + options_.retry_delay;
+        attempt = state.in_flight.erase(attempt);
       } else {
         ++attempt;
       }
     }
   }
 
-  /// Queues every key whose retry time has arrived. Call with `state_mutex_` held.
-  void promote_due_retries(TimePoint now)
+  /// Queues every key whose retry time has arrived.
+  static void promote_due_retries(State & state, TimePoint now)
   {
-    for (auto retry = retry_at_.begin(); retry != retry_at_.end();) {
+    for (auto retry = state.retry_at.begin(); retry != state.retry_at.end();) {
       if (retry->second <= now) {
-        waiting_.push_back(retry->first);
-        retry = retry_at_.erase(retry);
+        state.waiting.push_back(retry->first);
+        retry = state.retry_at.erase(retry);
       } else {
         ++retry;
       }
     }
   }
 
-  /// @brief Takes keys off the queue up to the concurrency bound. Call with `state_mutex_` held.
+  /// @brief Takes keys off the queue up to the concurrency bound.
   /// @return Each started key with the done callback of its attempt, to call with no lock held.
-  std::vector<std::pair<std::string, Done>> fill_slots(TimePoint now)
+  std::vector<std::pair<std::string, Done>> fill_slots(State & state, TimePoint now)
   {
     std::vector<std::pair<std::string, Done>> starts;
-    while (in_flight_.size() < options_.max_concurrent && !waiting_.empty()) {
-      const std::string key = std::move(waiting_.front());
-      waiting_.pop_front();
-      const uint64_t generation = ++last_generation_;
-      in_flight_.insert_or_assign(key, Attempt{generation, now + options_.timeout});
+    while (state.in_flight.size() < options_.max_concurrent && !state.waiting.empty()) {
+      const std::string key = std::move(state.waiting.front());
+      state.waiting.pop_front();
+      const uint64_t generation = ++state.last_generation;
+      state.in_flight.insert_or_assign(key, Attempt{generation, now + options_.timeout});
       starts.emplace_back(key, make_done(key, generation));
     }
     return starts;
@@ -270,16 +266,15 @@ private:
   {
     return [mailbox = mailbox_, key, generation](std::optional<Result> result) {
       {
-        std::lock_guard<std::mutex> lock(mailbox->mutex);
-        mailbox->completions.push_back(Completion{key, generation, std::move(result)});
-        mailbox->wake = true;
+        auto completions = mailbox->completions.lock();
+        completions->push_back(Completion{key, generation, std::move(result)});
       }
-      mailbox->signal.notify_all();
+      mailbox->arrived.set();
     };
   }
 
-  /// @return The earliest in-flight timeout or scheduled retry, if there is one. Call with `state_mutex_` held.
-  std::optional<TimePoint> next_deadline() const
+  /// @return The earliest in-flight timeout or scheduled retry, if there is one.
+  static std::optional<TimePoint> next_deadline(const State & state)
   {
     std::optional<TimePoint> deadline;
     const auto keep_earliest = [&deadline](TimePoint candidate) {
@@ -287,10 +282,10 @@ private:
         deadline = candidate;
       }
     };
-    for (const auto & attempt : in_flight_) {
+    for (const auto & attempt : state.in_flight) {
       keep_earliest(attempt.second.timeout_at);
     }
-    for (const auto & retry : retry_at_) {
+    for (const auto & retry : state.retry_at) {
       keep_earliest(retry.second);
     }
     return deadline;
@@ -300,13 +295,10 @@ private:
   const OnResult on_result_;
   const Options options_;
 
-  mutable std::mutex state_mutex_;
-  std::deque<std::string> waiting_;
-  std::unordered_map<std::string, Attempt> in_flight_;
-  std::unordered_map<std::string, TimePoint> retry_at_;
-  uint64_t last_generation_ = 0;
-
+  MutexProtected<State> state_{State{}};
   const std::shared_ptr<Mailbox> mailbox_;
+  /// Written only by the destructor, read only by the worker.
+  std::atomic<bool> stop_{false};
   std::thread worker_;
 };
 

@@ -5,6 +5,7 @@
 #define ROSGRAPH_MONITOR__EVENT_HPP_
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 
@@ -31,6 +32,15 @@ public:
   /// @return True if event has been set.
   bool check_and_clear();
 
+  /// @brief Wait for the event to be set, with a deadline. Handles spurious wakeups.
+  /// @param deadline Point in time after which waiting stops.
+  /// @return True if the event was already set, or became set before the deadline.
+  /// @return False if the event was not set before the deadline.
+  bool wait_until(std::chrono::steady_clock::time_point deadline);
+
+  /// @brief Wait for the event to be set, blocking indefinitely. Handles spurious wakeups.
+  void wait();
+
   /// @brief Wait for the event to be set, with a timeout. Handles spurious wakeups.
   /// @tparam Rep (from std::chrono) Numerical type that represents number of ticks.
   /// @tparam Period (from std::chrono) std::ratio representing seconds per tick.
@@ -48,6 +58,7 @@ public:
 private:
   std::mutex mutex_;
   std::condition_variable cv_;
+  /// Read without the lock, but only ever mutated while holding mutex_, so waiters cannot miss a notification.
   std::atomic_bool state_{false};
 };
 

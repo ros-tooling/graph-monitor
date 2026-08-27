@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: 2025 Polymath Robotics, Inc.
 # SPDX-License-Identifier: Apache-2.0
+import threading
 import time
 import uuid
-
-import rclpy
 
 
 def create_random_node_name():
@@ -34,52 +33,148 @@ def find_node(graph_msg, node_name):
     return None
 
 
-def wait_for_message_sync(node, message_type, topic, condition_func, timeout_sec=5.0):
+def first_matching(messages, condition):
     """
-    Wait for a message that meets a condition or timeout.
+    Return the first message that satisfies condition, or None if no message does.
 
     Args:
-        node: ROS2 node to use for spinning
-        message_type: The message type to subscribe to
-        topic: Topic name to listen on
-        condition_func: Function that takes a message and returns True if condition is met
-        timeout_sec: Maximum time to wait in seconds
+        messages: Iterable of messages, oldest first
+        condition: Predicate taking a message and returning a bool
 
     Returns
     -------
-        tuple: (success: bool, messages: list) - success indicates if condition was met
+        The first matching message, or None
 
     """
-    messages = []
+    return next((msg for msg in messages if condition(msg)), None)
 
-    def callback(msg):
-        messages.append(msg)
 
-    subscriber = node.create_subscription(
-        message_type,
-        topic,
-        callback,
-        1,  # QoS depth
-    )
+class MessageCollector:
+    """
+    Collect every message published on a topic while the collector is entered.
 
-    # Create separate executor for this operation to avoid race condition
-    executor = rclpy.executors.SingleThreadedExecutor()
-    executor.add_node(node)
+    The subscription lives for the lifetime of the context manager, so a collector entered
+    before an action observes all messages that the action causes.
+    Topics that publish only on change require this ordering:
+    a subscription created after the change misses the message describing it.
 
-    start_time = time.time()
-    end_time = start_time + timeout_sec
+    The node must already be spun by an executor the caller owns.
+    This collector creates no executor and spins nothing,
+    so it cannot race the caller's executor for callbacks.
 
-    try:
-        while time.time() < end_time:
-            executor.spin_once(timeout_sec=0.1)
+    Example
+    -------
+        with MessageCollector(node, Graph, '/rosgraph') as collector:
+            collector.wait_for_any()
+            do_something_that_changes_the_graph()
+            success, messages = collector.wait_until(lambda msg: len(msg.nodes) > 3)
 
-            # Check if any message meets the condition
-            if messages and condition_func(messages[-1]):
-                return True, messages
+    """
 
-        # Timeout reached without meeting condition
-        return False, messages
+    def __init__(self, node, message_type, topic, qos_depth=10):
+        """
+        Configure a collector without subscribing.
 
-    finally:
-        executor.remove_node(node)
-        node.destroy_subscription(subscriber)
+        Args:
+            node: ROS 2 node that a caller-owned executor is already spinning
+            message_type: The message type to subscribe to
+            topic: Topic name to listen on
+            qos_depth: Subscription queue depth, deep enough to hold a burst of messages
+
+        """
+        self._node = node
+        self._message_type = message_type
+        self._topic = topic
+        self._qos_depth = qos_depth
+        self._subscription = None
+        # Guards _messages and _checked, and wakes waiters when a message arrives.
+        self._arrival = threading.Condition()
+        self._messages = []
+        # Number of leading messages that wait_until has already passed to a condition.
+        self._checked = 0
+
+    def __enter__(self):
+        """Create the subscription and start collecting."""
+        self._subscription = self._node.create_subscription(
+            self._message_type,
+            self._topic,
+            self._collect,
+            self._qos_depth,
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Destroy the subscription and stop collecting."""
+        self._node.destroy_subscription(self._subscription)
+        self._subscription = None
+        return False
+
+    def _collect(self, msg):
+        with self._arrival:
+            self._messages.append(msg)
+            self._arrival.notify_all()
+
+    @property
+    def messages(self):
+        """Every message collected so far, oldest first."""
+        with self._arrival:
+            return list(self._messages)
+
+    def wait_for_any(self, timeout_sec=5.0):
+        """
+        Block until at least one message has been collected.
+
+        A publisher that publishes on graph change publishes because this collector subscribed,
+        so receiving that message proves the publisher-to-subscriber path is live
+        before the caller acts.
+
+        Args:
+            timeout_sec: Maximum time to wait in seconds
+
+        Returns
+        -------
+            True if a message arrived, False on timeout
+
+        """
+        with self._arrival:
+            return self._arrival.wait_for(lambda: bool(self._messages), timeout=timeout_sec)
+
+    def wait_until(self, condition, timeout_sec=5.0):
+        """
+        Block until condition holds for a collected message, or until timeout.
+
+        Every message not yet passed to a condition is checked, not just the most recent one,
+        so a match is never lost to a later message overwriting it.
+        Condition must be a pure predicate: it is called on partial and unrelated messages,
+        and returning False means keep waiting.
+
+        Args:
+            condition: Predicate taking a message and returning a bool
+            timeout_sec: Maximum time to wait in seconds
+
+        Returns
+        -------
+            tuple: (success: bool, messages: list) - messages holds everything collected so far
+
+        """
+        deadline = time.monotonic() + timeout_sec
+        while True:
+            with self._arrival:
+                start = self._checked
+                unchecked = self._messages[start:]
+
+            # Condition is caller code, so it runs outside the lock.
+            # A match consumes the messages up to and including itself, and no more,
+            # so a later call sees everything that followed the match.
+            for offset, msg in enumerate(unchecked):
+                if condition(msg):
+                    with self._arrival:
+                        self._checked = start + offset + 1
+                    return True, self.messages
+
+            with self._arrival:
+                self._checked = start + len(unchecked)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False, self.messages
+                self._arrival.wait_for(lambda: len(self._messages) > self._checked, timeout=remaining)

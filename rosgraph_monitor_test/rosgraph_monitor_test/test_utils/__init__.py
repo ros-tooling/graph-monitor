@@ -2,6 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Testing utilities for rosgraph_monitor package."""
 
-from .utils import create_random_node_name, find_node, wait_for_message_sync
+from .utils import MessageCollector, create_random_node_name, find_node, first_matching
 
-__all__ = ['create_random_node_name', 'find_node', 'wait_for_message_sync']
+__all__ = ['MessageCollector', 'create_random_node_name', 'find_node', 'first_matching']

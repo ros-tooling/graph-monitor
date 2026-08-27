@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import threading
 import unittest
+from contextlib import contextmanager
 
 import pytest
 import rclpy
@@ -17,7 +18,18 @@ from rosgraph_msgs.msg import Graph
 from rosgraph_msgs.msg import QoSProfile as QosProfileMsg
 from std_msgs.msg import Bool
 
-from rosgraph_monitor_test.test_utils import create_random_node_name, find_node, wait_for_message_sync
+from rosgraph_monitor_test.test_utils import (
+    MessageCollector,
+    create_random_node_name,
+    find_node,
+    first_matching,
+)
+
+# The monitor queries a new node's parameters as soon as it sees the node, and a query made before
+# the node's parameter services are discoverable fails and is retried after RosGraphMonitor's
+# Config::parameters::retry_delay of 5 seconds.
+# Observing parameters therefore has to allow for one retry cycle.
+PARAMETER_TIMEOUT_SEC = 15.0
 
 
 @pytest.mark.launch_test
@@ -82,6 +94,27 @@ class TestProcessOutput(unittest.TestCase):
                 new_node.declare_parameter(param_name, param_value)
         self.executor.add_node(new_node)
         return new_node, node_name
+
+    @contextmanager
+    def armed_graph_collector(self):
+        """
+        Yield a /rosgraph collector that has already received a message.
+
+        The monitor publishes only on graph change, so the collector subscribes before the test
+        changes the graph, and the first message confirms the collector receives what the monitor
+        publishes.
+
+        Returns
+        -------
+            Context manager yielding a MessageCollector
+
+        """
+        with MessageCollector(self.subscriber_node, Graph, '/rosgraph') as collector:
+            self.assertTrue(
+                collector.wait_for_any(timeout_sec=5.0),
+                'Should have received a /rosgraph message in response to subscribing.',
+            )
+            yield collector
 
     def cleanup_node(self, node, publisher=None, subscription=None):
         """
@@ -155,13 +188,19 @@ class TestProcessOutput(unittest.TestCase):
         )
 
     def test_adding_node(self):
-        new_node, node_name = self.add_node()
+        with self.armed_graph_collector() as collector:
+            new_node, node_name = self.add_node()
 
-        def new_node_condition(msg):
-            # Find the new node
-            test_node = find_node(msg, node_name)
-            if not test_node:
-                return False
+            def new_node_condition(msg):
+                return find_node(msg, node_name) is not None
+
+            success, messages = collector.wait_until(new_node_condition, timeout_sec=5.0)
+
+            self.assertTrue(
+                success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
+            )
+
+            test_node = find_node(first_matching(messages, new_node_condition), node_name)
 
             # Assert on equality of subscribers/publisher - new node should have
             # no publishers/subscribers
@@ -169,71 +208,71 @@ class TestProcessOutput(unittest.TestCase):
             # Note: Due to implementation details, the node might have publishers from other nodes
             # Let's just check that it's the expected node for now
             self.assertGreaterEqual(len(test_node.publishers), 0, 'New node publisher count should be non-negative.')
-            return True
-
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', new_node_condition, timeout_sec=5.0
-        )
-
-        self.assertTrue(
-            success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
-        )
 
         # Remove the node and check diagnostics again
         self.cleanup_node(new_node)
 
     def test_adding_node_with_parameters(self):
         params = {'param1': 'value1', 'param2': 42}
-        _, node_name = self.add_node(parameters=params)
 
-        # Wait for the graph to update with the new parameters
-        def parameters_condition(msg):
-            # Find the parameter node
-            updated_node = find_node(msg, node_name)
-            if not updated_node:
-                return False
+        with self.armed_graph_collector() as collector:
+            _, node_name = self.add_node(parameters=params)
 
+            # Wait for the graph to update with the new parameters
+            def parameters_condition(msg):
+                # Find the parameter node
+                updated_node = find_node(msg, node_name)
+                if not updated_node:
+                    return False
+
+                declared = {param.name: param for param in updated_node.parameters if param.name in params}
+                if len(declared) != len(params):
+                    return False
+
+                # The monitor publishes the names before it has described their types, so keep waiting.
+                return all(param.type != ParameterType.PARAMETER_NOT_SET for param in declared.values())
+
+            success, messages = collector.wait_until(parameters_condition, timeout_sec=PARAMETER_TIMEOUT_SEC)
+
+            self.assertTrue(
+                success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
+            )
+
+            updated_node = find_node(first_matching(messages, parameters_condition), node_name)
             declared = {param.name: param for param in updated_node.parameters if param.name in params}
-            if len(declared) != len(params):
-                return False
-
-            # The monitor publishes the names before it has described their types, so keep waiting.
-            if any(param.type == ParameterType.PARAMETER_NOT_SET for param in declared.values()):
-                return False
 
             self.assertEqual(declared['param1'].type, ParameterType.PARAMETER_STRING, 'param1 should be a string.')
             self.assertEqual(declared['param2'].type, ParameterType.PARAMETER_INTEGER, 'param2 should be an integer.')
             self.assertEqual(
                 len(updated_node.parameter_values), 0, 'parameter_values should be empty until values are read.'
             )
-            return True
-
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', parameters_condition, timeout_sec=5.0
-        )
-
-        self.assertTrue(
-            success, f'Should have received diagnostics for {node_name}. Received {len(messages)} messages.'
-        )
 
     def test_adding_publisher(self):
-        new_node, node_name = self.add_node()
+        with self.armed_graph_collector() as collector:
+            new_node, node_name = self.add_node()
 
-        # Add a publisher to the new node
-        qos = QoSProfile(depth=10)
-        test_publisher = new_node.create_publisher(Bool, '/test_topic', qos)
+            # Add a publisher to the new node
+            qos = QoSProfile(depth=10)
+            test_publisher = new_node.create_publisher(Bool, '/test_topic', qos)
 
-        # Wait for the graph to update with the new publisher
-        def publisher_condition(msg):
-            # Find the publisher node
-            updated_node = find_node(msg, node_name)
-            if not updated_node:
-                return False
+            # Wait for the graph to update with the new publisher
+            def publisher_condition(msg):
+                # Find the publisher node
+                updated_node = find_node(msg, node_name)
+                if not updated_node:
+                    return False
 
-            # Find the specific publisher we added
+                # Find the specific publisher we added
+                return any(pub.name == '/test_topic' for pub in updated_node.publishers)
+
+            success, messages = collector.wait_until(publisher_condition, timeout_sec=5.0)
+
+            self.assertTrue(
+                success, f'Should have received graph update with new publisher. Received {len(messages)} messages.'
+            )
+
+            updated_node = find_node(first_matching(messages, publisher_condition), node_name)
             test_publishers = [pub for pub in updated_node.publishers if pub.name == '/test_topic']
-            if not test_publishers:
-                return False
 
             # Assert that our publisher was added
             self.assertGreaterEqual(len(test_publishers), 1, 'Node should have at least one publisher with our topic.')
@@ -245,47 +284,40 @@ class TestProcessOutput(unittest.TestCase):
 
             # Verify QoS properties
             self.assert_qos_properties(publisher.qos, expected_depth=10, context='Publisher')
-            return True
-
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', publisher_condition, timeout_sec=5.0
-        )
-
-        self.assertTrue(
-            success, f'Should have received graph update with new publisher. Received {len(messages)} messages.'
-        )
 
         # Cleanup
         self.cleanup_node(new_node, test_publisher)
 
     def test_adding_subscription(self):
-        new_node, node_name = self.add_node()
+        with self.armed_graph_collector() as collector:
+            new_node, node_name = self.add_node()
 
-        # Add a subscription to the new node
-        qos = QoSProfile(depth=10)
+            # Add a subscription to the new node
+            qos = QoSProfile(depth=10)
 
-        def callback(msg):
-            pass
+            def callback(msg):
+                pass
 
-        test_subscription = new_node.create_subscription(Bool, '/test_sub_topic', callback, qos)
+            test_subscription = new_node.create_subscription(Bool, '/test_sub_topic', callback, qos)
 
-        # Wait for the graph to update with the new subscription
-        def subscription_condition(msg):
-            # Find the subscriber node
-            updated_node = find_node(msg, node_name)
-            if not updated_node:
-                print(f'DEBUG: No subscriber node found. Available nodes: {[n.name for n in msg.nodes]}')
-                return False
+            # Wait for the graph to update with the new subscription
+            def subscription_condition(msg):
+                # Find the subscriber node
+                updated_node = find_node(msg, node_name)
+                if not updated_node:
+                    return False
 
-            # Find the specific subscription we added
+                # Find the specific subscription we added
+                return any(sub.name == '/test_sub_topic' for sub in updated_node.subscriptions)
+
+            success, messages = collector.wait_until(subscription_condition, timeout_sec=5.0)
+
+            self.assertTrue(
+                success, f'Should have received graph update with new subscription. Received {len(messages)} messages.'
+            )
+
+            updated_node = find_node(first_matching(messages, subscription_condition), node_name)
             test_subscriptions = [sub for sub in updated_node.subscriptions if sub.name == '/test_sub_topic']
-            if not test_subscriptions:
-                print(
-                    f'DEBUG: No test_sub_topic subscription found. '
-                    f'Available subscriptions: '
-                    f'{[s.name for s in updated_node.subscriptions]}'
-                )
-                return False
 
             # Assert that our subscription was added
             self.assertGreaterEqual(
@@ -300,64 +332,42 @@ class TestProcessOutput(unittest.TestCase):
             )
 
             # Verify QoS properties
-            print(
-                f'DEBUG: Subscription QoS - depth: {subscription.qos.depth}, '
-                f'history: {subscription.qos.history}, '
-                f'reliability: {subscription.qos.reliability}'
-            )
-            print(
-                f'DEBUG: Subscription QoS - deadline: '
-                f'{subscription.qos.deadline.sec}s '
-                f'{subscription.qos.deadline.nanosec}ns'
-            )
             self.assert_qos_properties(subscription.qos, expected_depth=10, context='Subscription')
-            return True
-
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', subscription_condition, timeout_sec=5.0
-        )
-
-        self.assertTrue(
-            success, f'Should have received graph update with new subscription. Received {len(messages)} messages.'
-        )
 
         # Cleanup
         self.cleanup_node(new_node, subscription=test_subscription)
 
     def test_remove_node(self):
-        new_node, node_name = self.add_node()
+        with self.armed_graph_collector() as collector:
+            new_node, node_name = self.add_node()
 
-        # Wait for the node to appear in the graph
-        def new_node_condition(msg):
-            return find_node(msg, node_name) is not None
+            # Wait for the node to appear in the graph
+            def new_node_condition(msg):
+                return find_node(msg, node_name) is not None
 
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', new_node_condition, timeout_sec=5.0
-        )
+            success, messages = collector.wait_until(new_node_condition, timeout_sec=5.0)
 
-        self.assertTrue(
-            success, f'Should have received graph update with new node {node_name}. Received {len(messages)} messages.'
-        )
+            self.assertTrue(
+                success,
+                f'Should have received graph update with new node {node_name}. Received {len(messages)} messages.',
+            )
 
-        # Remove the node
-        self.cleanup_node(new_node)
+            # Remove the node
+            self.cleanup_node(new_node)
 
-        def removal_condition(msg):
-            node_found = find_node(msg, node_name)
-            if node_found is None:
-                return True
+            # The collector already consumed every message up to the one showing the node present,
+            # so a later message without the node describes the removal rather than the graph
+            # before the node existed.
+            def removal_condition(msg):
+                return find_node(msg, node_name) is None
 
-            return False
+            success, messages = collector.wait_until(removal_condition, timeout_sec=5.0)
 
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, Graph, '/rosgraph', removal_condition, timeout_sec=5.0
-        )
-
-        # The test passes if we detect any change in the graph after node removal
-        # This indicates the monitor is functioning and detecting topology changes
-        self.assertTrue(
-            success,
-            f'Should have detected some graph change after node removal. '
-            f'This indicates the rosgraph monitor is functioning properly. '
-            f'Received {len(messages) if messages else 0} messages.',
-        )
+            # The test passes if we detect any change in the graph after node removal
+            # This indicates the monitor is functioning and detecting topology changes
+            self.assertTrue(
+                success,
+                f'Should have detected some graph change after node removal. '
+                f'This indicates the rosgraph monitor is functioning properly. '
+                f'Received {len(messages) if messages else 0} messages.',
+            )

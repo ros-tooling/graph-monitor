@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -10,6 +12,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -21,6 +24,35 @@
 
 using testing::Return;
 using testing::SizeIs;
+
+/// How long to wait for a state change that should happen.
+constexpr auto kGenerousWait = std::chrono::seconds(5);
+/// How long to wait before asserting that a state change did not happen.
+constexpr auto kSettle = std::chrono::milliseconds(300);
+
+/// Polls `predicate` until it holds or `timeout` expires.
+template <typename Predicate>
+bool wait_for_condition(Predicate predicate, std::chrono::milliseconds timeout = kGenerousWait)
+{
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (predicate()) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return predicate();
+}
+
+/// Configuration whose parameter queries retry quickly and never time out on their own.
+rosgraph_monitor::GraphMonitorConfiguration patient_config(size_t max_concurrent = 4)
+{
+  rosgraph_monitor::GraphMonitorConfiguration config;
+  config.parameters.max_concurrent = max_concurrent;
+  config.parameters.timeout = std::chrono::seconds(30);
+  config.parameters.retry_delay = std::chrono::milliseconds(50);
+  return config;
+}
 
 class MockGraph : public rclcpp::node_interfaces::NodeGraphInterface
 {
@@ -223,8 +255,9 @@ private:
   std::function<std::vector<std::string>(const std::string &)> names_for_;
 };
 
-/// Accepts requests and never answers them, so observations stay in flight and the number of
-/// nodes started at once can be counted.
+/// Holds every parameter query until the test answers or fails it, counting attempts per node
+/// and recording which nodes have been forgotten.
+/// Every method is safe to call from the queue's worker thread and the test thread at once.
 class BlockingParameterService : public rosgraph_monitor::ParameterServiceClient
 {
 public:
@@ -233,23 +266,86 @@ public:
     return true;
   }
 
-  void list_parameters(const std::string & node_name, NamesCallback) override
+  void list_parameters(const std::string & node_name, NamesCallback callback) override
   {
-    std::lock_guard<std::mutex> lock(mutex);
-    started.insert(node_name);
+    std::lock_guard<std::mutex> lock(mutex_);
+    starts_[node_name]++;
+    pending_[node_name] = std::move(callback);
   }
 
-  void forget(const std::string &) override
-  {}
+  void forget(const std::string & node_name) override
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    forgotten_.insert(node_name);
+  }
 
+  /// Delivers `names` as the result of the outstanding query for `node_name`.
+  void answer(const std::string & node_name, std::vector<std::string> names)
+  {
+    if (auto callback = take(node_name)) {
+      callback(std::move(names));
+    }
+  }
+
+  /// Reports the outstanding query for `node_name` as failed.
+  void fail(const std::string & node_name)
+  {
+    if (auto callback = take(node_name)) {
+      callback(std::nullopt);
+    }
+  }
+
+  /// @return The nodes whose queries are outstanding.
+  std::set<std::string> outstanding()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::set<std::string> node_names;
+    for (const auto & [node_name, callback] : pending_) {
+      node_names.insert(node_name);
+    }
+    return node_names;
+  }
+
+  /// @return How many distinct nodes have had a query started for them.
   size_t started_count()
   {
-    std::lock_guard<std::mutex> lock(mutex);
-    return started.size();
+    std::lock_guard<std::mutex> lock(mutex_);
+    return starts_.size();
   }
 
-  std::mutex mutex;
-  std::set<std::string> started;
+  /// @return How many queries have been started for `node_name`.
+  size_t start_count(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = starts_.find(node_name);
+    return it == starts_.end() ? 0 : it->second;
+  }
+
+  /// @return Whether `node_name` has been forgotten.
+  bool forgotten(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return forgotten_.count(node_name) != 0;
+  }
+
+private:
+  /// @return The outstanding query's callback for `node_name`, removing it. Empty if there is none.
+  NamesCallback take(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = pending_.find(node_name);
+    if (it == pending_.end()) {
+      return NamesCallback();
+    }
+    NamesCallback callback = std::move(it->second);
+    pending_.erase(it);
+    return callback;
+  }
+
+  std::mutex mutex_;
+  std::map<std::string, NamesCallback> pending_;
+  std::map<std::string, size_t> starts_;
+  std::set<std::string> forgotten_;
 };
 
 class GraphMonitorTest : public testing::Test
@@ -330,14 +426,24 @@ protected:
       return names;
     });
 
-    auto logger = logger_.get_child("graphmon");
+    reset_monitor(rosgraph_monitor::GraphMonitorConfiguration{}, parameter_service_);
+  }
 
+  /// @brief Replace the monitor with one built from `config` and `parameter_client`.
+  /// @details Queue options are read once at construction, so changing them means a new monitor.
+  /// Any graph messages from the previous monitor are dropped.
+  void reset_monitor(
+    rosgraph_monitor::GraphMonitorConfiguration config,
+    std::shared_ptr<rosgraph_monitor::ParameterServiceClient> parameter_client)
+  {
+    graphmon_.reset();
+    drain_graphmon_msgs();
     graphmon_.emplace(
       node_graph_,
       [this]() { return now_; },
-      logger,
-      parameter_service_,
-      rosgraph_monitor::GraphMonitorConfiguration{},
+      logger_.get_child("graphmon"),
+      std::move(parameter_client),
+      config,
       [this](rosgraph_msgs::msg::Graph & msg) {
         std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
         queue_.push_back(msg);
@@ -359,13 +465,24 @@ protected:
     ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(10)));
   }
 
-  rosgraph_msgs::msg::Graph await_graphmon_msg()
+  /// @return The next graph message, or nullopt if none arrives within `timeout`.
+  std::optional<rosgraph_msgs::msg::Graph> await_graphmon_msg(
+    std::chrono::milliseconds timeout = std::chrono::milliseconds(100))
   {
     std::unique_lock<std::mutex> lock(graphmon_msg_mutex_);
-    graphmon_msg_cv_.wait_for(lock, std::chrono::milliseconds(100), [this]() { return !queue_.empty(); });
+    if (!graphmon_msg_cv_.wait_for(lock, timeout, [this]() { return !queue_.empty(); })) {
+      return std::nullopt;
+    }
     rosgraph_msgs::msg::Graph msg = queue_.front();
     queue_.pop_front();
     return msg;
+  }
+
+  /// Discards every graph message received so far.
+  void drain_graphmon_msgs()
+  {
+    std::lock_guard<std::mutex> lock(graphmon_msg_mutex_);
+    queue_.clear();
   }
 
   template <typename Predicate>
@@ -375,19 +492,21 @@ protected:
     const std::string & timeout_message = "Timed out waiting for condition")
   {
     auto start_time = std::chrono::steady_clock::now();
-    rosgraph_msgs::msg::Graph msg;
+    rosgraph_msgs::msg::Graph last_msg;
 
     while (true) {
-      msg = await_graphmon_msg();
-
-      if (condition(msg)) {
-        return msg;
+      auto msg = await_graphmon_msg();
+      if (msg) {
+        last_msg = *msg;
+        if (condition(last_msg)) {
+          return last_msg;
+        }
       }
 
       auto elapsed = std::chrono::steady_clock::now() - start_time;
       if (elapsed > timeout) {
         ADD_FAILURE() << timeout_message;
-        return msg;
+        return last_msg;
       }
     }
   }
@@ -997,6 +1116,7 @@ TEST_F(GraphMonitorTest, rosgraph_observes_a_node_whose_parameter_services_come_
 {
   // A node can be in the graph before its parameter services are discoverable. Nothing else
   // about the node changes when they appear, so the monitor has to keep asking.
+  reset_monitor(patient_config(), parameter_service_);
   parameter_service_->unreachable.insert("/late");
   set_nodes({MockedNode("/late", {"param1"})});
   node_graph_->notify_graph_change();
@@ -1017,4 +1137,127 @@ TEST_F(GraphMonitorTest, rosgraph_observes_a_node_whose_parameter_services_come_
 
   ASSERT_EQ(rosgraph_msg.nodes.front().parameters.size(), 1u);
   EXPECT_EQ(rosgraph_msg.nodes.front().parameters.front().name, "param1");
+}
+
+TEST_F(GraphMonitorTest, parameter_queries_are_bounded)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(2), blocking);
+
+  set_node_names({"n1", "n2", "n3", "n4"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->started_count() == 2; }))
+    << "Expected two queries to start, saw " << blocking->started_count();
+  EXPECT_FALSE(wait_for_condition([&blocking]() { return blocking->started_count() > 2; }, kSettle))
+    << "A third query started before a slot was free";
+
+  const auto in_flight = blocking->outstanding();
+  ASSERT_EQ(in_flight.size(), 2u);
+  blocking->answer(*in_flight.begin(), {"param1"});
+
+  EXPECT_TRUE(wait_for_condition([&blocking]() { return blocking->started_count() == 3; }))
+    << "Answering one query did not free a slot for the next";
+}
+
+TEST_F(GraphMonitorTest, repeated_graph_updates_do_not_duplicate_queries)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"repeat"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/repeat") == 1; }));
+
+  for (int update = 0; update < 5; update++) {
+    trigger_and_wait();
+  }
+
+  EXPECT_FALSE(wait_for_condition([&blocking]() { return blocking->start_count("/repeat") > 1; }, kSettle))
+    << "A query in flight was started again by a later graph update";
+}
+
+TEST_F(GraphMonitorTest, a_failed_query_is_retried_until_it_succeeds)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"flaky"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/flaky") == 1; }));
+
+  blocking->fail("/flaky");
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/flaky") == 2; }))
+    << "A failed query was not retried";
+
+  // Nothing touches the graph from here on but the answer itself.
+  drain_graphmon_msgs();
+  blocking->answer("/flaky", {"param1"});
+
+  auto msg = await_graphmon_msg(kGenerousWait);
+  ASSERT_TRUE(msg.has_value()) << "The retry's result did not publish the graph";
+  ASSERT_EQ(msg->nodes.size(), 1u);
+  ASSERT_EQ(msg->nodes.front().parameters.size(), 1u);
+  EXPECT_EQ(msg->nodes.front().parameters.front().name, "param1");
+}
+
+TEST_F(GraphMonitorTest, a_departed_nodes_query_is_cancelled)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"leaving"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/leaving") == 1; }));
+
+  set_node_names({});
+  EXPECT_TRUE(wait_for_condition([&blocking]() { return blocking->forgotten("/leaving"); }))
+    << "A departed node's client state was not dropped";
+
+  drain_graphmon_msgs();
+  blocking->answer("/leaving", {"param1"});
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "A cancelled query's response was recorded";
+}
+
+TEST_F(GraphMonitorTest, a_response_publishes_the_graph_by_itself)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"quiet"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/quiet") == 1; }));
+
+  // No further graph event follows, so only the response can publish these parameters.
+  drain_graphmon_msgs();
+  blocking->answer("/quiet", {"param1", "param2"});
+
+  auto msg = await_graphmon_msg(kGenerousWait);
+  ASSERT_TRUE(msg.has_value()) << "A parameter observation did not publish the graph on its own";
+  ASSERT_EQ(msg->nodes.size(), 1u);
+  std::vector<std::string> param_names;
+  for (const auto & descriptor : msg->nodes.front().parameters) {
+    param_names.push_back(descriptor.name);
+  }
+  EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
+}
+
+TEST_F(GraphMonitorTest, destroying_the_monitor_with_an_unanswered_query_does_not_hang)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"stuck"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/stuck") == 1; }));
+
+  auto destroyed = std::async(std::launch::async, [this]() { graphmon_.reset(); });
+  ASSERT_EQ(destroyed.wait_for(kGenerousWait), std::future_status::ready) << "Destruction blocked on a query in flight";
+  destroyed.get();
+}
+
+TEST_F(GraphMonitorTest, an_answer_after_destruction_is_safe)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"stuck"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/stuck") == 1; }));
+
+  graphmon_.reset();
+  // The done callback owns everything it touches.
+  blocking->answer("/stuck", {"param1"});
 }

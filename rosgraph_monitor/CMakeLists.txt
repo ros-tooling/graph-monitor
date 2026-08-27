@@ -96,6 +96,9 @@ if(BUILD_TESTING)
 
   ament_add_gmock(test_mutex_protected test/test_mutex_protected.cpp)
   target_link_libraries(test_mutex_protected ${PROJECT_NAME})
+
+  ament_add_gmock(test_query_queue test/test_query_queue.cpp)
+  target_link_libraries(test_query_queue ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

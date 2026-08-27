@@ -45,6 +45,8 @@ std::size_t std::hash<std::pair<std::string, std::string>>::operator()(
 namespace
 {
 
+using ParamQueries = rosgraph_monitor::QueryQueue<std::vector<std::string>>;
+
 bool match_any_prefixes(const std::vector<std::string> & prefixes, const std::string & value)
 {
   for (const std::string & prefix : prefixes) {
@@ -153,6 +155,19 @@ RosGraphMonitor::RosGraphMonitor(
 , parameter_client_(parameter_client)
 , graph_(GraphTracking{})
 , graph_change_callback_(change_callback)
+, param_queries_(
+    [this](const std::string & node_name, ParamQueries::Done done) {
+      if (!parameter_client_->is_ready(node_name)) {
+        RCLCPP_DEBUG(logger_, "Parameter services for %s are not available yet", node_name.c_str());
+        done(std::nullopt);
+        return;
+      }
+      parameter_client_->list_parameters(node_name, std::move(done));
+    },
+    [this](const std::string & node_name, std::vector<std::string> parameter_names) {
+      on_node_parameters(node_name, std::move(parameter_names));
+    },
+    ParamQueries::Options{config.parameters.max_concurrent, config.parameters.timeout, config.parameters.retry_delay})
 {
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));
@@ -181,11 +196,12 @@ void RosGraphMonitor::update_graph()
     track_endpoint_updates(topics_and_types, *graph);
   }
 
-  // Both of these reach back into the tracked state, so neither may run under the lock.
+  // Outside the lock: the query queue's thread and the change callback both take it.
   for (const auto & node_name : changes.to_observe) {
-    query_node_parameters(node_name);
+    param_queries_.request(node_name);
   }
   for (const auto & node_name : changes.departed) {
+    param_queries_.cancel(node_name);
     parameter_client_->forget(node_name);
   }
   notify_graph_change();
@@ -670,49 +686,39 @@ void RosGraphMonitor::notify_graph_change()
   }
 }
 
-void RosGraphMonitor::on_node_parameters(
-  const std::string & node_name, std::optional<std::vector<std::string>> parameter_names)
+void RosGraphMonitor::on_node_parameters(const std::string & node_name, std::vector<std::string> parameter_names)
 {
-  if (!parameter_names) {
-    RCLCPP_WARN(logger_, "Failed observation of parameters for %s", node_name.c_str());
-    return;
+  RCLCPP_DEBUG(logger_, "Observed %zu parameters for node %s", parameter_names.size(), node_name.c_str());
+
+  std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
+  descriptors.reserve(parameter_names.size());
+  for (const auto & name : parameter_names) {
+    rcl_interfaces::msg::ParameterDescriptor descriptor;
+    descriptor.name = name;
+    descriptor.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
+    descriptors.push_back(std::move(descriptor));
   }
-  RCLCPP_DEBUG(logger_, "Observed %zu parameters for node %s", parameter_names->size(), node_name.c_str());
 
   bool changed = false;
   {
-    // Runs on whichever thread delivered the responses, while the watch thread may be rebuilding the graph.
+    // Runs on the query queue's thread, while the watch thread may be rebuilding the graph.
     auto graph = graph_.lock();
     auto it = graph->nodes.find(node_name);
     if (it == graph->nodes.end()) {
       // The node left the graph between the request and the response.
       return;
     }
-    if (!it->second.params) {
-      it->second.params.emplace();
+    auto & params = it->second.params;
+    // A first observation is a change even when the node has no parameters.
+    changed = !params.has_value() || params->descriptors != descriptors;
+    if (!params) {
+      params.emplace();
     }
-    auto & descriptors = it->second.params->descriptors;
-
-    descriptors.clear();
-    descriptors.reserve(parameter_names->size());
-    for (const auto & name : *parameter_names) {
-      rcl_interfaces::msg::ParameterDescriptor descriptor;
-      descriptor.name = name;
-      descriptor.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
-      descriptors.push_back(std::move(descriptor));
-    }
+    params->descriptors = std::move(descriptors);
   }
 
   if (changed) {
     notify_graph_change();
-  }
-}
-
-void RosGraphMonitor::query_node_parameters(const std::string & node_name)
-{
-  if (parameter_client_->is_ready(node_name)) {
-    parameter_client_->list_parameters(
-      node_name, std::bind(&RosGraphMonitor::on_node_parameters, this, node_name, std::placeholders::_1));
   }
 }
 

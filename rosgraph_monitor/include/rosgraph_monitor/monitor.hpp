@@ -28,6 +28,7 @@
 #include "rosgraph_monitor/event.hpp"
 #include "rosgraph_monitor/mutex_protected.hpp"
 #include "rosgraph_monitor/parameter_collector.hpp"
+#include "rosgraph_monitor/query_queue.hpp"
 #include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
 #include "rosgraph_msgs/msg/graph.hpp"
 #include "rosgraph_msgs/msg/qo_s_profile.hpp"
@@ -80,6 +81,17 @@ struct GraphMonitorConfiguration
     // Any topics with these names will be ignored entirely for continuity checks
     std::unordered_set<std::string> ignore_topic_names;
   } continuity;
+
+  /// Read once at construction.
+  struct ParameterObservation
+  {
+    // How many nodes may have parameter queries in flight at once
+    size_t max_concurrent = 4;
+    // A query with no response by this point has failed and will be retried
+    std::chrono::milliseconds timeout{10000};
+    // Wait between attempts at one node
+    std::chrono::milliseconds retry_delay{5000};
+  } parameters;
 
   struct TopicStatisticsChecks
   {
@@ -252,13 +264,9 @@ protected:
     const std::string & message,
     const std::string & subname) const;
 
-  /// @brief Record parameters the collector has observed for a node
-  /// @note Runs on whichever thread delivered the parameter responses
-  void on_node_parameters(const std::string & node_name, std::optional<std::vector<std::string>> parameter_names);
-
-  /// @brief Query parameters for a newly discovered node
-  /// @param node_name The name of the node to query parameters for
-  void query_node_parameters(const std::string & node_name);
+  /// @brief Record a node's observed parameters
+  /// @note Runs on the query queue's thread
+  void on_node_parameters(const std::string & node_name, std::vector<std::string> parameter_names);
 
   /// @brief Invoke the graph change callback, if one is set.
   void notify_graph_change();
@@ -281,13 +289,16 @@ protected:
 
   /* Three different threads read and write to this state:
    * - the watch thread rebuilding the graph
-   * - eaach parameter query's thread writing back its results
+   * - the query queue's thread writing back parameter results
    * - the caller's thread reading via evaluate() or fill_rosgraph_msg()
    *
    * Mutex never held while invoking graph_change_callback_, which may trigger outside caller to re-enter.
    */
   MutexProtected<GraphTracking> graph_;
   GraphChangeCallback graph_change_callback_;
+
+  // Declared last so queries stop before anything they touch is destroyed.
+  QueryQueue<std::vector<std::string>> param_queries_;
 };
 
 }  // namespace rosgraph_monitor

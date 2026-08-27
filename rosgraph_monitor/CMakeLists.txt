@@ -90,6 +90,9 @@ if(BUILD_TESTING)
 
   ament_add_gmock(test_graph_monitor test/test_graph_monitor.cpp)
   target_link_libraries(test_graph_monitor ${PROJECT_NAME})
+
+  ament_add_gmock(test_event test/test_event.cpp)
+  target_link_libraries(test_event ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

@@ -47,6 +47,7 @@ namespace
 
 using ParamQueries = rosgraph_monitor::QueryQueue<std::vector<std::string>>;
 using DescriptorQueries = rosgraph_monitor::QueryQueue<std::vector<rcl_interfaces::msg::ParameterDescriptor>>;
+using ValueQueries = rosgraph_monitor::QueryQueue<rosgraph_monitor::ValueResponse>;
 
 bool match_any_prefixes(const std::vector<std::string> & prefixes, const std::string & value)
 {
@@ -99,6 +100,23 @@ std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
     descriptors.push_back(std::move(descriptor));
   }
   return descriptors;
+}
+
+std::optional<std::vector<rcl_interfaces::msg::ParameterValue>> align_values(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, const ValueResponse & response)
+{
+  const auto & [names, values] = response;
+  std::vector<rcl_interfaces::msg::ParameterValue> aligned;
+  aligned.reserve(descriptors.size());
+  for (const auto & descriptor : descriptors) {
+    const auto name = std::find(names.begin(), names.end(), descriptor.name);
+    const size_t index = static_cast<size_t>(std::distance(names.begin(), name));
+    if (name == names.end() || index >= values.size()) {
+      return std::nullopt;
+    }
+    aligned.push_back(values[index]);
+  }
+  return aligned;
 }
 
 void convert_maybe_inifite_durations(
@@ -198,6 +216,32 @@ RosGraphMonitor::RosGraphMonitor(
       config.parameters.timeout,
       config.parameters.retry_delay,
       config.parameters.first_retry_delay})
+, value_queries_(
+    [this](const std::string & node_name, ValueQueries::Done done) {
+      const auto names = recorded_parameter_names(node_name);
+      if (names.empty()) {
+        done(std::nullopt);
+        return;
+      }
+      if (!parameter_client_->is_ready(node_name)) {
+        RCLCPP_DEBUG(logger_, "Parameter services for %s are not available yet", node_name.c_str());
+        done(std::nullopt);
+        return;
+      }
+      // The response carries no names, so the requested ones travel with it to the receipt.
+      parameter_client_->get_parameters(
+        node_name,
+        names,
+        [names, done = std::move(done)](std::optional<std::vector<rcl_interfaces::msg::ParameterValue>> values) {
+          if (!values) {
+            done(std::nullopt);
+            return;
+          }
+          done(ValueResponse{names, std::move(*values)});
+        });
+    },
+    [this](const std::string & node_name, ValueResponse response) { on_node_values(node_name, std::move(response)); },
+    ValueQueries::Options{config.parameters.max_concurrent, config.parameters.timeout, config.parameters.retry_delay})
 , param_queries_(
     [this](const std::string & node_name, ParamQueries::Done done) {
       if (!parameter_client_->is_ready(node_name)) {
@@ -250,6 +294,7 @@ void RosGraphMonitor::update_graph()
   for (const auto & node_name : changes.departed) {
     param_queries_.cancel(node_name);
     descriptor_queries_.cancel(node_name);
+    value_queries_.cancel(node_name);
     parameter_client_->forget(node_name);
   }
   notify_graph_change();
@@ -780,9 +825,10 @@ void RosGraphMonitor::on_node_parameters(const std::string & node_name, std::vec
     params->descriptors = std::move(descriptors);
   }
 
-  // Outside the lock: the descriptor query's start call takes it.
+  // Outside the lock: the descriptor and value queries' start calls take it.
   if (!parameter_names.empty()) {
     descriptor_queries_.request(node_name);
+    value_queries_.request(node_name);
   }
   if (changed) {
     notify_graph_change();
@@ -806,6 +852,34 @@ void RosGraphMonitor::on_node_descriptors(
     auto & params = *it->second.params;
     changed = params.descriptors != descriptors;
     params.descriptors = std::move(descriptors);
+  }
+
+  if (changed) {
+    notify_graph_change();
+  }
+}
+
+void RosGraphMonitor::on_node_values(const std::string & node_name, ValueResponse response)
+{
+  RCLCPP_DEBUG(logger_, "Observed %zu parameter values for node %s", response.second.size(), node_name.c_str());
+
+  bool changed = false;
+  {
+    // Runs on the query queue's thread, while the watch thread may be rebuilding the graph.
+    auto graph = graph_.lock();
+    auto it = graph->nodes.find(node_name);
+    if (it == graph->nodes.end() || !it->second.params) {
+      // The node left the graph, or lost its observation, between the request and the response.
+      return;
+    }
+    auto & params = *it->second.params;
+    auto aligned = align_values(params.descriptors, response);
+    if (!aligned) {
+      // A recorded name has no value in this response, so nothing is recorded until a later cycle converges.
+      return;
+    }
+    changed = params.values != *aligned;
+    params.values = std::move(*aligned);
   }
 
   if (changed) {

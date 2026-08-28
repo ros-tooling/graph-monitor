@@ -22,6 +22,7 @@
 #include "rcl_interfaces/msg/list_parameters_result.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rcl_interfaces/msg/parameter_type.hpp"
+#include "rcl_interfaces/msg/parameter_value.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/time.hpp"
@@ -64,6 +65,16 @@ std::string gid_to_str(const RosRmwGid & gid);
 /// descriptor, and a recorded name absent from `names` is dropped.
 std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
   const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded, const std::vector<std::string> & names);
+
+/// @brief The names one parameter-value query asked for, paired with the values the node answered.
+/// The values are positional against the names.
+using ValueResponse = std::pair<std::vector<std::string>, std::vector<rcl_interfaces::msg::ParameterValue>>;
+
+/// @brief Line a positional parameter-value response up with a set of recorded descriptors.
+/// @return One value per recorded descriptor, in the recorded order.
+/// Nullopt when any recorded descriptor's name has no value in the response.
+std::optional<std::vector<rcl_interfaces::msg::ParameterValue>> align_values(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, const ValueResponse & response);
 
 struct GraphMonitorConfiguration
 {
@@ -286,6 +297,10 @@ protected:
   void on_node_descriptors(
     const std::string & node_name, std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors);
 
+  /// @brief Record a node's observed parameter values, aligned to its recorded descriptors
+  /// @note Runs on the query queue's thread
+  void on_node_values(const std::string & node_name, ValueResponse response);
+
   /// @brief Invoke the graph change callback, if one is set.
   void notify_graph_change();
 
@@ -316,8 +331,10 @@ protected:
   GraphChangeCallback graph_change_callback_;
 
   // Declared last so queries stop before anything they touch is destroyed.
-  // The names queue requests on the descriptor queue, so it is declared after it and stops first.
+  // The names queue requests on the descriptor and value queues,
+  // so it is declared after both of them and stops first.
   QueryQueue<std::vector<rcl_interfaces::msg::ParameterDescriptor>> descriptor_queries_;
+  QueryQueue<ValueResponse> value_queries_;
   QueryQueue<std::vector<std::string>> param_queries_;
 };
 

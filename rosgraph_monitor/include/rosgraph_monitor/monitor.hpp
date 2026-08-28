@@ -96,8 +96,10 @@ struct GraphMonitorConfiguration
     size_t max_concurrent = 4;
     // A query with no response by this point has failed and will be retried
     std::chrono::milliseconds timeout{10000};
-    // Wait between attempts at one node
+    // Longest wait between attempts at one node
     std::chrono::milliseconds retry_delay{5000};
+    // Wait before the first retry at a node, doubling per consecutive failure up to retry_delay
+    std::chrono::milliseconds first_retry_delay{500};
   } parameters;
 
   struct TopicStatisticsChecks

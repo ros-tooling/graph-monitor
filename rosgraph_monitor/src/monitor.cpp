@@ -194,7 +194,10 @@ RosGraphMonitor::RosGraphMonitor(
       on_node_descriptors(node_name, std::move(descriptors));
     },
     DescriptorQueries::Options{
-      config.parameters.max_concurrent, config.parameters.timeout, config.parameters.retry_delay})
+      config.parameters.max_concurrent,
+      config.parameters.timeout,
+      config.parameters.retry_delay,
+      config.parameters.first_retry_delay})
 , param_queries_(
     [this](const std::string & node_name, ParamQueries::Done done) {
       if (!parameter_client_->is_ready(node_name)) {
@@ -207,7 +210,11 @@ RosGraphMonitor::RosGraphMonitor(
     [this](const std::string & node_name, std::vector<std::string> parameter_names) {
       on_node_parameters(node_name, std::move(parameter_names));
     },
-    ParamQueries::Options{config.parameters.max_concurrent, config.parameters.timeout, config.parameters.retry_delay})
+    ParamQueries::Options{
+      config.parameters.max_concurrent,
+      config.parameters.timeout,
+      config.parameters.retry_delay,
+      config.parameters.first_retry_delay})
 {
   update_graph();
   watch_thread_ = std::thread(std::bind(&RosGraphMonitor::watch_for_updates, this));

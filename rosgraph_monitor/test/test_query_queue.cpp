@@ -63,6 +63,17 @@ Queue::Options impatient_options(size_t max_concurrent = 4)
   return options;
 }
 
+/// Options whose retries start short and grow, with attempts that never time out on their own.
+Queue::Options backoff_options(std::chrono::milliseconds first_retry_delay, std::chrono::milliseconds retry_delay)
+{
+  Queue::Options options;
+  options.max_concurrent = 1;
+  options.timeout = 30s;
+  options.retry_delay = retry_delay;
+  options.first_retry_delay = first_retry_delay;
+  return options;
+}
+
 /// Records every start, and hands the test each attempt's done callback to invoke when it chooses.
 class FakeCalls
 {
@@ -114,6 +125,43 @@ public:
 private:
   mutable std::mutex mutex_;
   std::vector<std::pair<std::string, Queue::Done>> started_;
+};
+
+/// Fails every attempt as it starts, recording when each start arrived.
+class FailingCalls
+{
+public:
+  Queue::StartCall start_call()
+  {
+    return [this](const std::string &, Queue::Done done) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        starts_.push_back(std::chrono::steady_clock::now());
+      }
+      done(std::nullopt);
+    };
+  }
+
+  size_t total_starts() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return starts_.size();
+  }
+
+  /// @return The wait between each start and the start before it.
+  std::vector<std::chrono::milliseconds> gaps() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::chrono::milliseconds> gaps;
+    for (size_t index = 1; index < starts_.size(); ++index) {
+      gaps.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(starts_[index] - starts_[index - 1]));
+    }
+    return gaps;
+  }
+
+private:
+  mutable std::mutex mutex_;
+  std::vector<std::chrono::steady_clock::time_point> starts_;
 };
 
 /// Records every delivered result.
@@ -304,6 +352,76 @@ TEST(QueryQueueTest, RetriesAfterTimeoutAndDropsLateResponse)
   std::this_thread::sleep_for(kSettle);
 
   EXPECT_EQ(results.size(), 0u);
+}
+
+TEST(QueryQueueTest, FirstRetryWaitsFirstRetryDelay)
+{
+  ResultLog results;
+  FakeCalls calls;
+  Queue queue(calls.start_call(), results.on_result(), backoff_options(20ms, 500ms));
+
+  queue.request("node_a");
+  ASSERT_TRUE(wait_for_condition([&calls] { return calls.starts_for("node_a") == 1; }));
+
+  calls.done_for("node_a", 0)(std::nullopt);
+  EXPECT_TRUE(wait_for_condition([&calls] { return calls.starts_for("node_a") == 2; }, 200ms));
+}
+
+TEST(QueryQueueTest, ConsecutiveFailuresDoubleTheWait)
+{
+  ResultLog results;
+  FailingCalls calls;
+  Queue queue(calls.start_call(), results.on_result(), backoff_options(20ms, 2s));
+
+  queue.request("node_a");
+  ASSERT_TRUE(wait_for_condition([&calls] { return calls.total_starts() >= 5; }));
+
+  const auto gaps = calls.gaps();
+  ASSERT_GE(gaps.size(), 4u);
+  EXPECT_GE(gaps[0], 20ms);
+  EXPECT_GE(gaps[1], 40ms);
+  EXPECT_GE(gaps[2], 80ms);
+  EXPECT_GE(gaps[3], 160ms);
+}
+
+TEST(QueryQueueTest, SuccessResetsTheWait)
+{
+  ResultLog results;
+  FakeCalls calls;
+  Queue queue(calls.start_call(), results.on_result(), backoff_options(20ms, 1s));
+
+  queue.request("node_a");
+  for (size_t attempt = 0; attempt < 4; ++attempt) {
+    ASSERT_TRUE(wait_for_condition([&calls, attempt] { return calls.starts_for("node_a") == attempt + 1; }));
+    calls.done_for("node_a", attempt)(std::nullopt);
+  }
+
+  ASSERT_TRUE(wait_for_condition([&calls] { return calls.starts_for("node_a") == 5; }));
+  calls.done_for("node_a", 4)("params_a");
+  ASSERT_TRUE(wait_for_condition([&results] { return results.size() == 1; }));
+
+  queue.request("node_a");
+  ASSERT_TRUE(wait_for_condition([&calls] { return calls.starts_for("node_a") == 6; }));
+
+  calls.done_for("node_a", 5)(std::nullopt);
+  EXPECT_TRUE(wait_for_condition([&calls] { return calls.starts_for("node_a") == 7; }, 150ms));
+}
+
+TEST(QueryQueueTest, BackoffStopsAtRetryDelay)
+{
+  ResultLog results;
+  FailingCalls calls;
+  const auto options = backoff_options(20ms, 60ms);
+  Queue queue(calls.start_call(), results.on_result(), options);
+
+  queue.request("node_a");
+  ASSERT_TRUE(wait_for_condition([&calls] { return calls.total_starts() >= 6; }));
+
+  // How much later than its scheduled time a retry may start.
+  constexpr auto kSchedulingSlack = 250ms;
+  for (const auto gap : calls.gaps()) {
+    EXPECT_LE(gap, options.retry_delay + kSchedulingSlack);
+  }
 }
 
 TEST(QueryQueueTest, DestructionWithUnansweredAttemptReturnsPromptly)

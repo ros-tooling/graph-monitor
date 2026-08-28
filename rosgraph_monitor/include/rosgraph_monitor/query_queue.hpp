@@ -26,7 +26,8 @@ namespace rosgraph_monitor
 
 /// @brief A bounded, deduplicating, retrying queue of keyed asynchronous queries.
 /// @details Runs at most `max_concurrent` attempts at once, retries a failed or timed out attempt
-/// after `retry_delay` until it succeeds or is cancelled, and reports only successful results.
+/// after `first_retry_delay` doubled once per consecutive failure and capped at `retry_delay`,
+/// until it succeeds or is cancelled, and reports only successful results.
 /// Results arrive on the queue's own thread.
 /// After the destructor returns, the result callback never runs again.
 /// @tparam Result Type of a successful query result.
@@ -47,8 +48,10 @@ public:
     size_t max_concurrent = 4;
     /// An attempt with no response by this point has failed.
     std::chrono::milliseconds timeout{10000};
-    /// Wait between attempts at one key.
+    /// Longest wait between attempts at one key.
     std::chrono::milliseconds retry_delay{5000};
+    /// Wait before a key's first retry; each consecutive failure doubles the wait, capped at `retry_delay`.
+    std::chrono::milliseconds first_retry_delay{5000};
   };
 
   QueryQueue(StartCall start_call, OnResult on_result, Options options = {})
@@ -94,6 +97,7 @@ public:
       waiting.erase(std::remove(waiting.begin(), waiting.end(), key), waiting.end());
       state->in_flight.erase(key);
       state->retry_at.erase(key);
+      state->failures.erase(key);
     }
     mailbox_->arrived.set();
   }
@@ -137,6 +141,8 @@ private:
     std::deque<std::string> waiting;
     std::unordered_map<std::string, Attempt> in_flight;
     std::unordered_map<std::string, TimePoint> retry_at;
+    /// Consecutive failed attempts at a key, dropped when it succeeds or is cancelled.
+    std::unordered_map<std::string, uint32_t> failures;
     uint64_t last_generation = 0;
   };
 
@@ -212,9 +218,10 @@ private:
       }
       state.in_flight.erase(attempt);
       if (completion.result) {
+        state.failures.erase(completion.key);
         deliveries.emplace_back(completion.key, std::move(*completion.result));
       } else {
-        state.retry_at[completion.key] = now + options_.retry_delay;
+        schedule_retry(state, completion.key, now);
       }
     }
     return deliveries;
@@ -225,12 +232,32 @@ private:
   {
     for (auto attempt = state.in_flight.begin(); attempt != state.in_flight.end();) {
       if (attempt->second.timeout_at <= now) {
-        state.retry_at[attempt->first] = now + options_.retry_delay;
+        schedule_retry(state, attempt->first, now);
         attempt = state.in_flight.erase(attempt);
       } else {
         ++attempt;
       }
     }
+  }
+
+  /// Counts one more consecutive failure at `key` and schedules its next attempt.
+  void schedule_retry(State & state, const std::string & key, TimePoint now) const
+  {
+    const uint32_t failures = ++state.failures[key];
+    state.retry_at[key] = now + retry_delay_for(failures);
+  }
+
+  /// @return The wait after `failures` consecutive failures: `first_retry_delay` doubled once per
+  /// earlier failure, capped at `retry_delay`.
+  std::chrono::milliseconds retry_delay_for(uint32_t failures) const
+  {
+    // Larger failure counts wait the cap, keeping the shift in range.
+    constexpr uint32_t kMaxDoublings = 30;
+    if (failures == 0 || failures > kMaxDoublings) {
+      return options_.retry_delay;
+    }
+    const std::chrono::milliseconds delay = options_.first_retry_delay * (int64_t{1} << (failures - 1));
+    return std::min(options_.retry_delay, delay);
   }
 
   /// Queues every key whose retry time has arrived.

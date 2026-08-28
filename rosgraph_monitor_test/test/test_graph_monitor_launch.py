@@ -49,10 +49,9 @@ class TestProcessOutput(unittest.TestCase):
     def setUpClass(cls):
         # Initialize the ROS context for the test node
         rclpy.init()
-        cls.subscriber_node = rclpy.create_node('subscriber_node')
 
+        # The executor spins the nodes that add_node creates, so the monitor can query them.
         cls.executor = rclpy.executors.MultiThreadedExecutor()
-        cls.executor.add_node(cls.subscriber_node)
 
         cls.spin_thread = threading.Thread(target=spin_surviving_destruction, args=(cls.executor,))
         cls.spin_thread.start()
@@ -63,7 +62,6 @@ class TestProcessOutput(unittest.TestCase):
         rclpy.shutdown()
         cls.spin_thread.join()
         cls.executor.shutdown()
-        cls.subscriber_node.destroy_node()
 
     def add_node(self, node_name=None, parameters=None):
         """
@@ -110,7 +108,7 @@ class TestProcessOutput(unittest.TestCase):
             Context manager yielding a MessageCollector
 
         """
-        with MessageCollector(self.subscriber_node, self.executor, Graph, '/rosgraph') as collector:
+        with MessageCollector(Graph, '/rosgraph') as collector:
             self.assertTrue(
                 collector.wait_for_any(timeout_sec=5.0),
                 'Should have received a /rosgraph message in response to subscribing.',

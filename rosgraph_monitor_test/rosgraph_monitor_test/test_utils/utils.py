@@ -4,7 +4,9 @@ import threading
 import time
 import uuid
 
+import rclpy
 from rclpy.exceptions import InvalidHandle
+from rclpy.executors import SingleThreadedExecutor
 
 
 def spin_surviving_destruction(executor):
@@ -84,36 +86,42 @@ class MessageCollector:
     Topics that publish only on change require this ordering:
     a subscription created after the change misses the message describing it.
 
-    The node must already be spun by an executor the caller owns.
-    This collector creates no executor and spins nothing,
-    so it cannot race the caller's executor for callbacks.
+    The collector owns a node of its own and a single-threaded executor that spins only that node,
+    on a daemon thread that runs for the lifetime of the context manager.
+    The subscription is created before the executor is built,
+    so it is present in every wait set that executor ever holds.
+    On exit the executor is shut down and its thread joined before anything is destroyed,
+    so no entity is destroyed while its executor spins.
+
+    Entering the collector is itself a graph change, because its node appears.
+    A topic that publishes only on graph change therefore publishes in response to being collected,
+    which is what wait_for_any's handshake observes.
 
     Example
     -------
-        with MessageCollector(node, executor, Graph, '/rosgraph') as collector:
+        with MessageCollector(Graph, '/rosgraph') as collector:
             collector.wait_for_any()
             do_something_that_changes_the_graph()
             success, messages = collector.wait_until(lambda msg: len(msg.nodes) > 3)
 
     """
 
-    def __init__(self, node, executor, message_type, topic, qos_depth=10):
+    def __init__(self, message_type, topic, qos_depth=10):
         """
-        Configure a collector without subscribing.
+        Configure a collector without creating a node, a subscription, or an executor.
 
         Args:
-            node: ROS 2 node that a caller-owned executor is already spinning
-            executor: The executor spinning the node, woken when the subscription set changes
             message_type: The message type to subscribe to
             topic: Topic name to listen on
             qos_depth: Subscription queue depth, deep enough to hold a burst of messages
 
         """
-        self._node = node
-        self._executor = executor
         self._message_type = message_type
         self._topic = topic
         self._qos_depth = qos_depth
+        self._node = None
+        self._executor = None
+        self._spin_thread = None
         self._subscription = None
         # Guards _messages and _checked, and wakes waiters when a message arrives.
         self._arrival = threading.Condition()
@@ -122,22 +130,30 @@ class MessageCollector:
         self._checked = 0
 
     def __enter__(self):
-        """Create the subscription and start collecting."""
+        """Create the node and its subscription, then spin them on a daemon thread."""
+        self._node = rclpy.create_node(f'message_collector_{uuid.uuid4().hex}')
         self._subscription = self._node.create_subscription(
             self._message_type,
             self._topic,
             self._collect,
             self._qos_depth,
         )
-        # Waking the executor makes it rebuild its wait set, so it notices the new subscription immediately.
-        self._executor.wake()
+        self._executor = SingleThreadedExecutor()
+        self._executor.add_node(self._node)
+        self._spin_thread = threading.Thread(target=spin_surviving_destruction, args=(self._executor,), daemon=True)
+        self._spin_thread.start()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Destroy the subscription and stop collecting."""
+        """Stop the executor and join its thread, then destroy the subscription and the node."""
+        self._executor.shutdown()
+        self._spin_thread.join()
         self._node.destroy_subscription(self._subscription)
-        self._executor.wake()
+        self._node.destroy_node()
         self._subscription = None
+        self._executor = None
+        self._spin_thread = None
+        self._node = None
         return False
 
     def _collect(self, msg):

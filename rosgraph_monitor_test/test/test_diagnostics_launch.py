@@ -35,11 +35,9 @@ class TestProcessOutput(unittest.TestCase):
         # Initialize the ROS context for the test node
         rclpy.init()
         self.publisher_node = rclpy.create_node('publisher_node')
-        self.subscriber_node = rclpy.create_node('subscriber_node')
 
         self.executor = rclpy.executors.MultiThreadedExecutor()
         self.executor.add_node(self.publisher_node)
-        self.executor.add_node(self.subscriber_node)
 
         # Configure QoS based on RMW implementation
         if os.environ.get('RMW_IMPLEMENTATION_WRAPPER') == 'rmw_stats_shim':
@@ -63,7 +61,6 @@ class TestProcessOutput(unittest.TestCase):
         # Shutdown the ROS context
         self.executor.shutdown()
         self.spin_thread.join()
-        self.subscriber_node.destroy_node()
         self.publisher_node.destroy_node()
         rclpy.shutdown()
 
@@ -74,7 +71,7 @@ class TestProcessOutput(unittest.TestCase):
 
         # The aggregator publishes periodically rather than on change,
         # so this test does not need to arm the collector ahead of an action.
-        with MessageCollector(self.subscriber_node, self.executor, DiagnosticArray, '/diagnostics_agg') as collector:
+        with MessageCollector(DiagnosticArray, '/diagnostics_agg') as collector:
             success, messages = collector.wait_until(diagnostic_condition, timeout_sec=5.0)
 
         self.assertTrue(

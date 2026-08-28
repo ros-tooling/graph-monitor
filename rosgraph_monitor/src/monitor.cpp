@@ -611,7 +611,13 @@ void RosGraphMonitor::watch_for_updates()
   const auto wait_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100));
   while (!shutdown_) {
     if (graph_change_event_->check_and_clear()) {
-      update_graph();
+      // A graph query only fails once the context is gone, so watching ends instead of spinning on a dead context.
+      try {
+        update_graph();
+      } catch (const std::exception & e) {
+        RCLCPP_DEBUG(logger_, "Stopping graph watch: %s", e.what());
+        break;
+      }
       update_event_.set();
     }
     node_graph_->wait_for_graph_change(graph_change_event_, wait_ns);

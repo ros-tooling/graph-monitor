@@ -23,6 +23,7 @@ from rosgraph_monitor_test.test_utils import (
     create_random_node_name,
     find_node,
     first_matching,
+    spin_surviving_destruction,
 )
 
 # The monitor queries a new node's parameters as soon as it sees the node, and a query made before
@@ -53,7 +54,7 @@ class TestProcessOutput(unittest.TestCase):
         cls.executor = rclpy.executors.MultiThreadedExecutor()
         cls.executor.add_node(cls.subscriber_node)
 
-        cls.spin_thread = threading.Thread(target=cls.executor.spin)
+        cls.spin_thread = threading.Thread(target=spin_surviving_destruction, args=(cls.executor,))
         cls.spin_thread.start()
 
     @classmethod
@@ -137,6 +138,8 @@ class TestProcessOutput(unittest.TestCase):
         if subscription is not None:
             node.destroy_subscription(subscription)
         self.executor.remove_node(node)
+        # Waking the executor rebuilds its wait set without the node before the node's entities are destroyed.
+        self.executor.wake()
         node.destroy_node()
 
     def assert_qos_properties(self, qos, expected_depth=10, context=''):

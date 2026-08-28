@@ -4,6 +4,32 @@ import threading
 import time
 import uuid
 
+from rclpy.exceptions import InvalidHandle
+
+
+def spin_surviving_destruction(executor):
+    """
+    Spin an executor until it or its context is shut down, resuming after an entity is destroyed.
+
+    An entity destroyed between the executor's wait and its take raises InvalidHandle,
+    and the destroyed entity is simply gone, so spinning resumes.
+    Every other exception propagates to the caller.
+
+    Args:
+        executor: The executor to spin, already holding every node it should serve
+
+    Returns
+    -------
+        None
+
+    """
+    while True:
+        try:
+            executor.spin()
+            return
+        except InvalidHandle:
+            continue
+
 
 def create_random_node_name():
     """Generate a random node name for testing."""

@@ -16,7 +16,7 @@ from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from std_msgs.msg import Bool
 
-from rosgraph_monitor_test.test_utils import MessageCollector
+from rosgraph_monitor_test.test_utils import MessageCollector, spin_surviving_destruction
 
 
 @pytest.mark.launch_test
@@ -51,7 +51,7 @@ class TestProcessOutput(unittest.TestCase):
         self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
         self.publish_timer = self.publisher_node.create_timer(timer_period_sec=0.1, callback=self.publisher_callback)
 
-        self.spin_thread = threading.Thread(target=self.executor.spin)
+        self.spin_thread = threading.Thread(target=spin_surviving_destruction, args=(self.executor,))
         self.spin_thread.start()
 
     def publisher_callback(self):

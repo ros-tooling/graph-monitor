@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -59,6 +60,21 @@ bool match_any_prefixes(const std::vector<std::string> & prefixes, const std::st
   return false;
 }
 
+/// @return Whether any of `descriptors` is named `name`.
+bool named_among(const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, const std::string & name)
+{
+  return std::any_of(
+    descriptors.begin(), descriptors.end(), [&name](const auto & descriptor) { return descriptor.name == name; });
+}
+
+/// @brief Erase every recorded value whose name is no longer among the recorded descriptors.
+void erase_unnamed_values(rosgraph_monitor::RecordedParameters & params)
+{
+  for (auto it = params.values.begin(); it != params.values.end();) {
+    it = named_among(params.descriptors, it->first) ? std::next(it) : params.values.erase(it);
+  }
+}
+
 }  // namespace
 
 namespace rosgraph_monitor
@@ -102,21 +118,45 @@ std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
   return descriptors;
 }
 
-std::optional<std::vector<rcl_interfaces::msg::ParameterValue>> align_values(
-  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, const ValueResponse & response)
+std::vector<rcl_interfaces::msg::ParameterDescriptor> merge_descriptors(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded,
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & described)
+{
+  std::vector<rcl_interfaces::msg::ParameterDescriptor> merged;
+  merged.reserve(recorded.size());
+  for (const auto & descriptor : recorded) {
+    const auto found = std::find_if(described.begin(), described.end(), [&descriptor](const auto & candidate) {
+      return candidate.name == descriptor.name;
+    });
+    merged.push_back(found != described.end() ? *found : descriptor);
+  }
+  return merged;
+}
+
+std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> pair_values(const ValueResponse & response)
 {
   const auto & [names, values] = response;
-  std::vector<rcl_interfaces::msg::ParameterValue> aligned;
-  aligned.reserve(descriptors.size());
-  for (const auto & descriptor : descriptors) {
-    const auto name = std::find(names.begin(), names.end(), descriptor.name);
-    const size_t index = static_cast<size_t>(std::distance(names.begin(), name));
-    if (name == names.end() || index >= values.size()) {
-      return std::nullopt;
-    }
-    aligned.push_back(values[index]);
+  std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> paired;
+  for (size_t index = 0; index < names.size() && index < values.size(); index++) {
+    paired.emplace(names[index], values[index]);
   }
-  return aligned;
+  return paired;
+}
+
+std::vector<rcl_interfaces::msg::ParameterValue> parallel_values(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors,
+  const std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> & values)
+{
+  std::vector<rcl_interfaces::msg::ParameterValue> parallel;
+  parallel.reserve(descriptors.size());
+  for (const auto & descriptor : descriptors) {
+    const auto value = values.find(descriptor.name);
+    if (value == values.end()) {
+      return {};
+    }
+    parallel.push_back(value->second);
+  }
+  return parallel;
 }
 
 void convert_maybe_inifite_durations(
@@ -754,7 +794,7 @@ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg)
 
     if (node_info.params) {
       node_msg.parameters = node_info.params->descriptors;
-      node_msg.parameter_values = node_info.params->values;
+      node_msg.parameter_values = parallel_values(node_info.params->descriptors, node_info.params->values);
     }
 
     // Add publishers for this node
@@ -823,6 +863,7 @@ void RosGraphMonitor::on_node_parameters(const std::string & node_name, std::vec
     auto descriptors = reconcile_descriptors(params->descriptors, parameter_names);
     changed = first_observation || params->descriptors != descriptors;
     params->descriptors = std::move(descriptors);
+    erase_unnamed_values(*params);
   }
 
   // Outside the lock: the descriptor and value queries' start calls take it.
@@ -850,8 +891,9 @@ void RosGraphMonitor::on_node_descriptors(
       return;
     }
     auto & params = *it->second.params;
-    changed = params.descriptors != descriptors;
-    params.descriptors = std::move(descriptors);
+    auto merged = merge_descriptors(params.descriptors, descriptors);
+    changed = params.descriptors != merged;
+    params.descriptors = std::move(merged);
   }
 
   if (changed) {
@@ -873,13 +915,15 @@ void RosGraphMonitor::on_node_values(const std::string & node_name, ValueRespons
       return;
     }
     auto & params = *it->second.params;
-    auto aligned = align_values(params.descriptors, response);
-    if (!aligned) {
-      // A recorded name has no value in this response, so nothing is recorded until a later cycle converges.
-      return;
+    const auto paired = pair_values(response);
+    for (const auto & descriptor : params.descriptors) {
+      const auto value = paired.find(descriptor.name);
+      if (value == paired.end() || params.values.count(descriptor.name) != 0) {
+        continue;
+      }
+      params.values.emplace(descriptor.name, value->second);
+      changed = true;
     }
-    changed = params.values != *aligned;
-    params.values = std::move(*aligned);
   }
 
   if (changed) {

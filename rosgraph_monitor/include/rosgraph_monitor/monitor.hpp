@@ -59,6 +59,17 @@ namespace rosgraph_monitor
 std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE]);
 std::string gid_to_str(const RosRmwGid & gid);
 
+/// @brief What is recorded about one node's parameters.
+struct RecordedParameters
+{
+  /// One descriptor per parameter name, in the order the parameters are published in.
+  std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
+  /// The value recorded for a parameter name, absent for a name whose value is not known yet.
+  std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> values;
+  /// The names whose values were recorded from parameter events, which outrank query responses.
+  std::unordered_set<std::string> event_valued;
+};
+
 /// @brief Bring a set of recorded descriptors in line with a freshly observed list of names.
 /// @return One descriptor per observed name, in the observed order.
 /// A name already among `recorded` keeps its recorded descriptor, a new name gets a NOT_SET
@@ -66,15 +77,28 @@ std::string gid_to_str(const RosRmwGid & gid);
 std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
   const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded, const std::vector<std::string> & names);
 
+/// @brief Update a set of recorded descriptors from a freshly described set.
+/// @return One descriptor per recorded name, in the recorded order.
+/// A recorded name that `described` covers takes the described descriptor, a recorded name absent
+/// from `described` keeps its recorded descriptor, and a described name that is not recorded is dropped.
+std::vector<rcl_interfaces::msg::ParameterDescriptor> merge_descriptors(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded,
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & described);
+
 /// @brief The names one parameter-value query asked for, paired with the values the node answered.
 /// The values are positional against the names.
 using ValueResponse = std::pair<std::vector<std::string>, std::vector<rcl_interfaces::msg::ParameterValue>>;
 
-/// @brief Line a positional parameter-value response up with a set of recorded descriptors.
-/// @return One value per recorded descriptor, in the recorded order.
-/// Nullopt when any recorded descriptor's name has no value in the response.
-std::optional<std::vector<rcl_interfaces::msg::ParameterValue>> align_values(
-  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors, const ValueResponse & response);
+/// @brief Pair each requested name of a parameter-value response with the value at its position.
+/// @return One entry per requested name that the response carries a value for.
+std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> pair_values(const ValueResponse & response);
+
+/// @brief Lay recorded values out against a set of descriptors.
+/// @return One value per descriptor, in the descriptors' order.
+/// Empty when any descriptor's name has no recorded value.
+std::vector<rcl_interfaces::msg::ParameterValue> parallel_values(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors,
+  const std::unordered_map<std::string, rcl_interfaces::msg::ParameterValue> & values);
 
 struct GraphMonitorConfiguration
 {
@@ -184,7 +208,7 @@ protected:
     bool missing = false;
     bool stale = false;
     // nullopt until a successful observation is made, differentiating "no params" from "don't know"
-    std::optional<NodeParameters> params;
+    std::optional<RecordedParameters> params;
 
     explicit NodeTracking(const std::string & name);
   };
@@ -297,7 +321,7 @@ protected:
   void on_node_descriptors(
     const std::string & node_name, std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors);
 
-  /// @brief Record a node's observed parameter values, aligned to its recorded descriptors
+  /// @brief Record a node's observed parameter values, for recorded names with no value yet
   /// @note Runs on the query queue's thread
   void on_node_values(const std::string & node_name, ValueResponse response);
 

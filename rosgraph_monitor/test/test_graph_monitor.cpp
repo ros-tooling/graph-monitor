@@ -1511,6 +1511,25 @@ TEST(ReconcileDescriptors, a_relist_preserves_known_types)
   EXPECT_EQ(reconciled[1].type, ParameterType::PARAMETER_NOT_SET);
 }
 
+TEST(MergeDescriptors, a_describe_updates_recorded_names_and_drops_the_rest)
+{
+  using rcl_interfaces::msg::ParameterType;
+  // A describe answering about a name set that has moved on is not reachable through the monitor's
+  // public behavior: the describe asks about the names recorded when it starts, and departure, the
+  // only thing that drops an observation, cancels the describe too.
+  // The merge is tested at its own interface instead.
+  const auto recorded = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_NOT_SET);
+  const auto described = descriptors_named({"param2", "param3"}, ParameterType::PARAMETER_STRING);
+
+  const auto merged = rosgraph_monitor::merge_descriptors(recorded, described);
+
+  ASSERT_EQ(merged.size(), 2u);
+  EXPECT_EQ(merged[0].name, "param1");
+  EXPECT_EQ(merged[0].type, ParameterType::PARAMETER_NOT_SET) << "An undescribed name lost its recorded descriptor";
+  EXPECT_EQ(merged[1].name, "param2");
+  EXPECT_EQ(merged[1].type, ParameterType::PARAMETER_STRING) << "A described name kept its old descriptor";
+}
+
 TEST_F(GraphMonitorTest, a_failed_describe_leaves_names_visible_and_retries)
 {
   auto blocking = std::make_shared<BlockingParameterService>();
@@ -1664,28 +1683,45 @@ TEST_F(GraphMonitorTest, departure_cancels_value_queries)
   EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "A cancelled value query's response was recorded";
 }
 
-TEST(AlignValues, a_reordered_response_is_lined_up_by_name)
+TEST(PairValues, a_response_is_paired_positionally_with_the_requested_names)
+{
+  const auto paired = rosgraph_monitor::pair_values({{"param2", "param1"}, indexed_values({"param2", "param1"})});
+
+  ASSERT_EQ(paired.size(), 2u);
+  EXPECT_EQ(paired.at("param2").integer_value, 0);
+  EXPECT_EQ(paired.at("param1").integer_value, 1);
+}
+
+TEST(PairValues, a_name_the_response_ran_out_of_values_for_is_unpaired)
+{
+  const auto paired = rosgraph_monitor::pair_values({{"param1", "param2"}, indexed_values({"param1"})});
+
+  ASSERT_EQ(paired.size(), 1u);
+  EXPECT_EQ(paired.count("param1"), 1u);
+}
+
+TEST(ParallelValues, a_reordered_response_is_lined_up_by_name)
 {
   using rcl_interfaces::msg::ParameterType;
   const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+  const auto paired = rosgraph_monitor::pair_values({{"param2", "param1"}, indexed_values({"param2", "param1"})});
 
-  const auto aligned =
-    rosgraph_monitor::align_values(descriptors, {{"param2", "param1"}, indexed_values({"param2", "param1"})});
+  const auto parallel = rosgraph_monitor::parallel_values(descriptors, paired);
 
-  ASSERT_TRUE(aligned.has_value());
-  EXPECT_THAT(integer_values(*aligned), testing::ElementsAre(1, 0));
+  EXPECT_THAT(integer_values(parallel), testing::ElementsAre(1, 0));
 }
 
-TEST(AlignValues, values_for_a_stale_name_set_are_not_published)
+TEST(ParallelValues, values_for_a_stale_name_set_are_not_published)
 {
   using rcl_interfaces::msg::ParameterType;
   // A name set that changes between the request and the response is not reachable through the
   // monitor's public behavior: names are queried once per successful observation, and departure,
   // the only thing that drops an observation, cancels the value query too.
-  // The alignment is tested at its own interface instead.
+  // The layout is tested at its own interface instead.
   const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+  const auto paired = rosgraph_monitor::pair_values({{"param1"}, indexed_values({"param1"})});
 
-  const auto aligned = rosgraph_monitor::align_values(descriptors, {{"param1"}, indexed_values({"param1"})});
+  const auto parallel = rosgraph_monitor::parallel_values(descriptors, paired);
 
-  EXPECT_FALSE(aligned.has_value()) << "A recorded name with no value still produced a values array";
+  EXPECT_TRUE(parallel.empty()) << "A recorded name with no value still produced a values array";
 }

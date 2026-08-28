@@ -10,6 +10,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 namespace rmw_stats_shim
 {

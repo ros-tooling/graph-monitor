@@ -230,8 +230,10 @@ class TestProcessOutput(unittest.TestCase):
                 if len(declared) != len(params):
                     return False
 
-                # The monitor publishes the names before it has described their types, so keep waiting.
-                return all(param.type != ParameterType.PARAMETER_NOT_SET for param in declared.values())
+                # Names publish before types, and values publish separately, so wait for all three.
+                if any(param.type == ParameterType.PARAMETER_NOT_SET for param in declared.values()):
+                    return False
+                return len(updated_node.parameter_values) == len(updated_node.parameters)
 
             success, messages = collector.wait_until(parameters_condition, timeout_sec=PARAMETER_TIMEOUT_SEC)
 
@@ -242,20 +244,12 @@ class TestProcessOutput(unittest.TestCase):
             updated_node = find_node(first_matching(messages, parameters_condition), node_name)
             declared = {param.name: param for param in updated_node.parameters if param.name in params}
 
-            # The values arrive in their own publish, and are either empty or parallel to the parameters.
-            if len(updated_node.parameter_values) != len(updated_node.parameters):
-                return False
-
             self.assertEqual(declared['param1'].type, ParameterType.PARAMETER_STRING, 'param1 should be a string.')
             self.assertEqual(declared['param2'].type, ParameterType.PARAMETER_INTEGER, 'param2 should be an integer.')
-            self.assertEqual(
-                len(updated_node.parameter_values), 0, 'parameter_values should be empty until values are read.'
-            )
 
             values = dict(zip([param.name for param in updated_node.parameters], updated_node.parameter_values))
             self.assertEqual(values['param1'].string_value, 'value1', 'param1 should hold its declared value.')
             self.assertEqual(values['param2'].integer_value, 42, 'param2 should hold its declared value.')
-            return True
 
     def test_adding_publisher(self):
         with self.armed_graph_collector() as collector:

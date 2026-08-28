@@ -104,21 +104,31 @@ void RclcppParameterServiceClient::describe_parameters(
 void RclcppParameterServiceClient::get_parameters(
   const std::string & node_name, const std::vector<std::string> & names, ValuesCallback callback)
 {
-  client_for(node_name)->get_parameters(names, [callback](std::shared_future<std::vector<rclcpp::Parameter>> future) {
-    try {
-      const auto parameters = future.get();
-      std::vector<rcl_interfaces::msg::ParameterValue> values;
-      values.reserve(parameters.size());
-      for (const auto & parameter : parameters) {
-        values.push_back(parameter.get_value_message());
+  const auto client = client_for(node_name);
+  // A call that cannot be made reports failure through the callback, so the callback runs exactly once on every path.
+  if (client == nullptr) {
+    callback(std::nullopt);
+    return;
+  }
+  try {
+    client->get_parameters(names, [callback](std::shared_future<std::vector<rclcpp::Parameter>> future) {
+      try {
+        const auto parameters = future.get();
+        std::vector<rcl_interfaces::msg::ParameterValue> values;
+        values.reserve(parameters.size());
+        for (const auto & parameter : parameters) {
+          values.push_back(parameter.get_value_message());
+        }
+        callback(std::move(values));
+      } catch (const std::exception &) {
+        // The node went away, or the call was interrupted. Either way there is nothing to
+        // report, and the collector treats a failure the same as an absent node.
+        callback(std::nullopt);
       }
-      callback(std::move(values));
-    } catch (const std::exception &) {
-      // The node went away, or the call was interrupted. Either way there is nothing to
-      // report, and the collector treats a failure the same as an absent node.
-      callback(std::nullopt);
-    }
-  });
+    });
+  } catch (const std::exception &) {
+    callback(std::nullopt);
+  }
 }
 
 void RclcppParameterServiceClient::forget(const std::string & node_name)

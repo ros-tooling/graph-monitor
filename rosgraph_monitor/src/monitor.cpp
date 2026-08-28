@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -99,7 +100,9 @@ std::string gid_to_str(const RosRmwGid & gid)
 }
 
 std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
-  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded, const std::vector<std::string> & names)
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded,
+  const std::vector<std::string> & names,
+  const std::unordered_set<std::string> & keep)
 {
   std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
   descriptors.reserve(names.size());
@@ -114,6 +117,11 @@ std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
     descriptor.name = name;
     descriptor.type = rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET;
     descriptors.push_back(std::move(descriptor));
+  }
+  for (const auto & descriptor : recorded) {
+    if (keep.count(descriptor.name) != 0 && !named_among(descriptors, descriptor.name)) {
+      descriptors.push_back(descriptor);
+    }
   }
   return descriptors;
 }
@@ -762,6 +770,55 @@ void RosGraphMonitor::on_topic_statistics(const rosgraph_monitor_msgs::msg::Topi
   }
 }
 
+void RosGraphMonitor::on_parameter_event(const rcl_interfaces::msg::ParameterEvent & event)
+{
+  bool changed = false;
+  {
+    // Runs on the subscription's thread, while the watch thread may be rebuilding the graph.
+    auto graph = graph_.lock();
+    auto it = graph->nodes.find(event.node);
+    if (it == graph->nodes.end() || !it->second.params) {
+      // The node is untracked, or its parameters are not observed yet; the initial observation covers it.
+      return;
+    }
+    auto & params = *it->second.params;
+
+    for (const auto & parameter : event.deleted_parameters) {
+      const auto descriptor =
+        std::find_if(params.descriptors.begin(), params.descriptors.end(), [&parameter](const auto & candidate) {
+          return candidate.name == parameter.name;
+        });
+      if (descriptor != params.descriptors.end()) {
+        params.descriptors.erase(descriptor);
+        changed = true;
+      }
+      changed = params.values.erase(parameter.name) != 0 || changed;
+      params.event_valued.erase(parameter.name);
+    }
+
+    for (const auto * parameters : {&event.new_parameters, &event.changed_parameters}) {
+      for (const auto & parameter : *parameters) {
+        // An event carries no descriptor, so a name with no recorded one is typed from its value.
+        if (!named_among(params.descriptors, parameter.name)) {
+          rcl_interfaces::msg::ParameterDescriptor descriptor;
+          descriptor.name = parameter.name;
+          descriptor.type = parameter.value.type;
+          params.descriptors.push_back(std::move(descriptor));
+          changed = true;
+        }
+        const auto recorded = params.values.find(parameter.name);
+        changed = recorded == params.values.end() || recorded->second != parameter.value || changed;
+        params.values.insert_or_assign(parameter.name, parameter.value);
+        changed = params.event_valued.insert(parameter.name).second || changed;
+      }
+    }
+  }
+
+  if (changed) {
+    notify_graph_change();
+  }
+}
+
 void RosGraphMonitor::statusWrapper(
   diagnostic_updater::DiagnosticStatusWrapper & msg,
   uint8_t level,
@@ -860,7 +917,7 @@ void RosGraphMonitor::on_node_parameters(const std::string & node_name, std::vec
     if (first_observation) {
       params.emplace();
     }
-    auto descriptors = reconcile_descriptors(params->descriptors, parameter_names);
+    auto descriptors = reconcile_descriptors(params->descriptors, parameter_names, params->event_valued);
     changed = first_observation || params->descriptors != descriptors;
     params->descriptors = std::move(descriptors);
     erase_unnamed_values(*params);

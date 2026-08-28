@@ -11,7 +11,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
-from rcl_interfaces.msg import ParameterType
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile
 from rosgraph_msgs.msg import Graph
@@ -31,6 +31,25 @@ from rosgraph_monitor_test.test_utils import (
 # Config::parameters::retry_delay of 5 seconds.
 # Observing parameters therefore has to allow for one retry cycle.
 PARAMETER_TIMEOUT_SEC = 15.0
+
+
+def node_parameter_values(msg, node_name):
+    """
+    Map the parameter names of a node in a graph message to their values.
+
+    Args:
+        msg (Graph): The graph message to read.
+        node_name (str): Name of the node to look for.
+
+    Returns
+    -------
+        dict: Name to value, empty if the node is absent or its values are not published yet.
+
+    """
+    node = find_node(msg, node_name)
+    if node is None or len(node.parameter_values) != len(node.parameters):
+        return {}
+    return dict(zip([param.name for param in node.parameters], node.parameter_values))
 
 
 @pytest.mark.launch_test
@@ -217,7 +236,7 @@ class TestProcessOutput(unittest.TestCase):
         params = {'param1': 'value1', 'param2': 42}
 
         with self.armed_graph_collector() as collector:
-            _, node_name = self.add_node(parameters=params)
+            new_node, node_name = self.add_node(parameters=params)
 
             # Wait for the graph to update with the new parameters
             def parameters_condition(msg):
@@ -250,6 +269,44 @@ class TestProcessOutput(unittest.TestCase):
             values = dict(zip([param.name for param in updated_node.parameters], updated_node.parameter_values))
             self.assertEqual(values['param1'].string_value, 'value1', 'param1 should hold its declared value.')
             self.assertEqual(values['param2'].integer_value, 42, 'param2 should hold its declared value.')
+
+            # From here the monitor makes no further parameter queries for this node,
+            # so /parameter_events is the only way these changes can reach the graph.
+            new_node.set_parameters([Parameter('param2', value=43)])
+
+            def new_value_condition(msg):
+                values = node_parameter_values(msg, node_name)
+                if 'param1' not in values or 'param2' not in values:
+                    return False
+                return values['param2'].integer_value == 43 and values['param1'].string_value == 'value1'
+
+            success, messages = collector.wait_until(new_value_condition, timeout_sec=5.0)
+            self.assertTrue(
+                success,
+                f'Should have received the changed value of param2 for {node_name}. Received {len(messages)} messages.',
+            )
+
+            # A statically typed parameter cannot be undeclared, so the one that gets deleted
+            # is declared with dynamic typing and then set to NOT_SET.
+            new_node.declare_parameter('param3', 7, ParameterDescriptor(dynamic_typing=True))
+
+            def added_parameter_condition(msg):
+                return 'param3' in node_parameter_values(msg, node_name)
+
+            success, messages = collector.wait_until(added_parameter_condition, timeout_sec=5.0)
+            self.assertTrue(success, f'Should have received param3 for {node_name}. Received {len(messages)} messages.')
+
+            new_node.set_parameters([Parameter('param3', Parameter.Type.NOT_SET)])
+
+            def deleted_parameter_condition(msg):
+                values = node_parameter_values(msg, node_name)
+                return 'param2' in values and 'param3' not in values
+
+            success, messages = collector.wait_until(deleted_parameter_condition, timeout_sec=5.0)
+            self.assertTrue(
+                success,
+                f'Should have seen param3 disappear from {node_name}. Received {len(messages)} messages.',
+            )
 
     def test_adding_publisher(self):
         with self.armed_graph_collector() as collector:

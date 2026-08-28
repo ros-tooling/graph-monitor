@@ -21,6 +21,7 @@
 #include "diagnostic_updater/diagnostic_status_wrapper.hpp"
 #include "rcl_interfaces/msg/list_parameters_result.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
+#include "rcl_interfaces/msg/parameter_event.hpp"
 #include "rcl_interfaces/msg/parameter_type.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "rclcpp/logger.hpp"
@@ -71,11 +72,14 @@ struct RecordedParameters
 };
 
 /// @brief Bring a set of recorded descriptors in line with a freshly observed list of names.
-/// @return One descriptor per observed name, in the observed order.
+/// @return One descriptor per observed name in the observed order,
+/// followed by the kept descriptors the names leave out, in the recorded order.
 /// A name already among `recorded` keeps its recorded descriptor, a new name gets a NOT_SET
-/// descriptor, and a recorded name absent from `names` is dropped.
+/// descriptor, and a recorded name absent from both `names` and `keep` is dropped.
 std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
-  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded, const std::vector<std::string> & names);
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded,
+  const std::vector<std::string> & names,
+  const std::unordered_set<std::string> & keep);
 
 /// @brief Update a set of recorded descriptors from a freshly described set.
 /// @return One descriptor per recorded name, in the recorded order.
@@ -194,6 +198,11 @@ public:
   /// @brief Integrate new topic statistics input to determine if topics are meeting contracts.
   /// @param statistics Incoming statistics list
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & statistics);
+
+  /// @brief Integrate a parameter event, updating the recorded parameters of the node it names.
+  /// @param event Incoming event
+  /// @details Dropped for an untracked node, or for a node whose parameters are not observed yet.
+  void on_parameter_event(const rcl_interfaces::msg::ParameterEvent & event);
 
   /// @brief Fill a Graph message containing current graph state
   void fill_rosgraph_msg(rosgraph_msgs::msg::Graph & msg);

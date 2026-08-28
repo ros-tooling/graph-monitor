@@ -14,17 +14,6 @@
 namespace rosgraph_monitor
 {
 
-struct NodeParameters
-{
-  std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors;
-  std::vector<rcl_interfaces::msg::ParameterValue> values;
-
-  bool empty() const
-  {
-    return descriptors.empty();
-  }
-};
-
 /// @brief Pure interface providing parameter service calls to discover parameter information from nodes.
 /// @details Abstracted for polymorphic dependency injection to test without full RMW.
 class ParameterServiceClient

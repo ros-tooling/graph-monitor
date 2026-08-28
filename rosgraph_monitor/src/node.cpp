@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "rcl_interfaces/msg/parameter_event.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rosgraph_monitor/rclcpp_parameter_client.hpp"
@@ -53,6 +54,10 @@ Node::Node(const rclcpp::NodeOptions & options)
 , params_(param_listener_.get_params())
 , sub_topic_statistics_(create_subscription<rosgraph_monitor_msgs::msg::TopicStatistics>(
     "/topic_statistics", rclcpp::QoS{10}, std::bind(&Node::on_topic_statistics, this, std::placeholders::_1)))
+, sub_parameter_events_(create_subscription<rcl_interfaces::msg::ParameterEvent>(
+    "/parameter_events",
+    rclcpp::ParameterEventsQoS(),
+    std::bind(&Node::on_parameter_event, this, std::placeholders::_1)))
 , pub_diagnostics_(create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10))
 , pub_rosgraph_(create_publisher<rosgraph_msgs::msg::Graph>("/rosgraph", rclcpp::QoS(1).transient_local().reliable()))
 , timer_publish_report_(create_wall_timer(
@@ -81,6 +86,11 @@ void Node::update_params(const rosgraph_monitor::Params & params)
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)
 {
   graph_monitor_.on_topic_statistics(*msg);
+}
+
+void Node::on_parameter_event(const rcl_interfaces::msg::ParameterEvent::SharedPtr msg)
+{
+  graph_monitor_.on_parameter_event(*msg);
 }
 
 void Node::publish_diagnostics()

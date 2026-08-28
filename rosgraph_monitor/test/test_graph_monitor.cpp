@@ -20,6 +20,7 @@
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gmock/gmock.h"
+#include "rcl_interfaces/msg/parameter_event.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rosgraph_monitor/monitor.hpp"
 
@@ -244,6 +245,24 @@ static std::vector<rcl_interfaces::msg::ParameterValue> indexed_values(const std
   return values;
 }
 
+/// @return A parameter named `name` carrying `value` as an integer.
+static rcl_interfaces::msg::Parameter integer_parameter(const std::string & name, int64_t value)
+{
+  rcl_interfaces::msg::Parameter parameter;
+  parameter.name = name;
+  parameter.value.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  parameter.value.integer_value = value;
+  return parameter;
+}
+
+/// @return An event from `node_name` carrying no parameters, for the caller to fill.
+static rcl_interfaces::msg::ParameterEvent parameter_event(const std::string & node_name)
+{
+  rcl_interfaces::msg::ParameterEvent event;
+  event.node = node_name;
+  return event;
+}
+
 /// @return The integer value of each entry, in order.
 static std::vector<int64_t> integer_values(const std::vector<rcl_interfaces::msg::ParameterValue> & values)
 {
@@ -273,6 +292,15 @@ static bool all_typed(const std::vector<rcl_interfaces::msg::ParameterDescriptor
   return !descriptors.empty() && std::all_of(descriptors.begin(), descriptors.end(), [type](const auto & descriptor) {
     return descriptor.type == type;
   });
+}
+
+/// @return Whether the message reports one node carrying `parameter_count` typed and valued parameters.
+/// Descriptors and values are recorded by separate queues, so this is what both having landed looks like.
+static bool fully_observed(const rosgraph_msgs::msg::Graph & msg, size_t parameter_count)
+{
+  return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == parameter_count &&
+         all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) &&
+         msg.nodes.front().parameter_values.size() == parameter_count;
 }
 
 /// Answers parameter queries straight from the mocked graph, on the calling thread.
@@ -673,6 +701,15 @@ protected:
     queue_.clear();
   }
 
+  /// Discards graph messages until none arrives for `quiet`.
+  /// Separate receipts publish the same state one after another, so a settled queue is what
+  /// asserting on the absence of a later message needs.
+  void drain_until_quiet(std::chrono::milliseconds quiet = kSettle)
+  {
+    while (await_graphmon_msg(quiet).has_value()) {
+    }
+  }
+
   template <typename Predicate>
   rosgraph_msgs::msg::Graph await_graphmon_msg_until(
     Predicate condition,
@@ -697,6 +734,22 @@ protected:
         return last_msg;
       }
     }
+  }
+
+  /// Answers a node's outstanding name, descriptor, and value queries,
+  /// recording `names` as integers valued by their index.
+  void answer_full_observation(
+    const std::shared_ptr<BlockingParameterService> & blocking,
+    const std::string & node_name,
+    const std::vector<std::string> & names)
+  {
+    ASSERT_TRUE(wait_for_condition([&]() { return blocking->start_count(node_name) == 1; }));
+    blocking->answer(node_name, names);
+    ASSERT_TRUE(wait_for_condition(
+      [&]() { return blocking->describe_start_count(node_name) == 1 && blocking->value_start_count(node_name) == 1; }));
+    blocking->answer_describe(
+      node_name, descriptors_named(names, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER));
+    blocking->answer_values(node_name, indexed_values(names));
   }
 
   void set_node_names(std::vector<std::string> node_names)
@@ -1502,13 +1555,49 @@ TEST(ReconcileDescriptors, a_relist_preserves_known_types)
   // drops its observation. The reconcile is tested at its own interface instead.
   const auto recorded = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_STRING);
 
-  const auto reconciled = rosgraph_monitor::reconcile_descriptors(recorded, {"param2", "param3"});
+  const auto reconciled = rosgraph_monitor::reconcile_descriptors(recorded, {"param2", "param3"}, {});
 
   ASSERT_EQ(reconciled.size(), 2u);
   EXPECT_EQ(reconciled[0].name, "param2");
   EXPECT_EQ(reconciled[0].type, ParameterType::PARAMETER_STRING) << "A re-listed name lost its known type";
   EXPECT_EQ(reconciled[1].name, "param3");
   EXPECT_EQ(reconciled[1].type, ParameterType::PARAMETER_NOT_SET);
+}
+
+TEST(ReconcileDescriptors, a_relist_keeps_event_valued_names)
+{
+  using rcl_interfaces::msg::ParameterType;
+  // A re-list of a fully observed node is not reachable through the monitor's public behavior:
+  // names are queried once per successful observation, and a node that returns from missing
+  // drops its observation, event_valued names and all.
+  // The reconcile is tested at its own interface instead.
+  const auto recorded = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_STRING);
+
+  const auto reconciled = rosgraph_monitor::reconcile_descriptors(recorded, {"param1", "param3"}, {"param2"});
+
+  ASSERT_EQ(reconciled.size(), 3u);
+  EXPECT_THAT(descriptor_names(reconciled), testing::ElementsAre("param1", "param3", "param2"));
+  EXPECT_EQ(reconciled[2].type, ParameterType::PARAMETER_STRING)
+    << "An event-valued name absent from the response lost its descriptor";
+}
+
+TEST(MergeDescriptors, a_describe_updates_recorded_names_and_drops_the_rest)
+{
+  using rcl_interfaces::msg::ParameterType;
+  // A describe answering about a name set that has moved on is not reachable through the monitor's
+  // public behavior: the describe asks about the names recorded when it starts, and departure, the
+  // only thing that drops an observation, cancels the describe too.
+  // The merge is tested at its own interface instead.
+  const auto recorded = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_NOT_SET);
+  const auto described = descriptors_named({"param2", "param3"}, ParameterType::PARAMETER_STRING);
+
+  const auto merged = rosgraph_monitor::merge_descriptors(recorded, described);
+
+  ASSERT_EQ(merged.size(), 2u);
+  EXPECT_EQ(merged[0].name, "param1");
+  EXPECT_EQ(merged[0].type, ParameterType::PARAMETER_NOT_SET) << "An undescribed name lost its recorded descriptor";
+  EXPECT_EQ(merged[1].name, "param2");
+  EXPECT_EQ(merged[1].type, ParameterType::PARAMETER_STRING) << "A described name kept its old descriptor";
 }
 
 TEST_F(GraphMonitorTest, a_failed_describe_leaves_names_visible_and_retries)
@@ -1664,28 +1753,213 @@ TEST_F(GraphMonitorTest, departure_cancels_value_queries)
   EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "A cancelled value query's response was recorded";
 }
 
-TEST(AlignValues, a_reordered_response_is_lined_up_by_name)
+TEST(PairValues, a_response_is_paired_positionally_with_the_requested_names)
+{
+  const auto paired = rosgraph_monitor::pair_values({{"param2", "param1"}, indexed_values({"param2", "param1"})});
+
+  ASSERT_EQ(paired.size(), 2u);
+  EXPECT_EQ(paired.at("param2").integer_value, 0);
+  EXPECT_EQ(paired.at("param1").integer_value, 1);
+}
+
+TEST(PairValues, a_name_the_response_ran_out_of_values_for_is_unpaired)
+{
+  const auto paired = rosgraph_monitor::pair_values({{"param1", "param2"}, indexed_values({"param1"})});
+
+  ASSERT_EQ(paired.size(), 1u);
+  EXPECT_EQ(paired.count("param1"), 1u);
+}
+
+TEST(ParallelValues, a_reordered_response_is_lined_up_by_name)
 {
   using rcl_interfaces::msg::ParameterType;
   const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+  const auto paired = rosgraph_monitor::pair_values({{"param2", "param1"}, indexed_values({"param2", "param1"})});
 
-  const auto aligned =
-    rosgraph_monitor::align_values(descriptors, {{"param2", "param1"}, indexed_values({"param2", "param1"})});
+  const auto parallel = rosgraph_monitor::parallel_values(descriptors, paired);
 
-  ASSERT_TRUE(aligned.has_value());
-  EXPECT_THAT(integer_values(*aligned), testing::ElementsAre(1, 0));
+  EXPECT_THAT(integer_values(parallel), testing::ElementsAre(1, 0));
 }
 
-TEST(AlignValues, values_for_a_stale_name_set_are_not_published)
+TEST(ParallelValues, values_for_a_stale_name_set_are_not_published)
 {
   using rcl_interfaces::msg::ParameterType;
   // A name set that changes between the request and the response is not reachable through the
   // monitor's public behavior: names are queried once per successful observation, and departure,
   // the only thing that drops an observation, cancels the value query too.
-  // The alignment is tested at its own interface instead.
+  // The layout is tested at its own interface instead.
   const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+  const auto paired = rosgraph_monitor::pair_values({{"param1"}, indexed_values({"param1"})});
 
-  const auto aligned = rosgraph_monitor::align_values(descriptors, {{"param1"}, indexed_values({"param1"})});
+  const auto parallel = rosgraph_monitor::parallel_values(descriptors, paired);
 
-  EXPECT_FALSE(aligned.has_value()) << "A recorded name with no value still produced a values array";
+  EXPECT_TRUE(parallel.empty()) << "A recorded name with no value still produced a values array";
+}
+
+TEST_F(GraphMonitorTest, a_changed_parameter_event_updates_the_value_without_a_query)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"evented"});
+  answer_full_observation(blocking, "/evented", {"param1", "param2"});
+  await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return fully_observed(msg, 2); },
+    kGenerousWait,
+    "Timed out waiting for the initial observation");
+
+  auto event = parameter_event("/evented");
+  event.changed_parameters.push_back(integer_parameter("param1", 7));
+  graphmon_->on_parameter_event(event);
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && integer_values(msg.nodes.front().parameter_values) == std::vector<int64_t>{7, 1};
+    },
+    kGenerousWait,
+    "Timed out waiting for the event's value to be published");
+  EXPECT_THAT(descriptor_names(msg.nodes.front().parameters), testing::ElementsAre("param1", "param2"));
+
+  EXPECT_FALSE(wait_for_condition(
+    [&blocking]() {
+      return blocking->start_count("/evented") > 1 || blocking->describe_start_count("/evented") > 1 ||
+             blocking->value_start_count("/evented") > 1;
+    },
+    kSettle))
+    << "The event started a service query";
+}
+
+TEST_F(GraphMonitorTest, a_value_response_does_not_overwrite_an_event_value)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"valued"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/valued") == 1; }));
+  blocking->answer("/valued", {"param1", "param2"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() {
+    return blocking->describe_start_count("/valued") == 1 && blocking->value_start_count("/valued") == 1;
+  }));
+  blocking->answer_describe(
+    "/valued", descriptors_named({"param1", "param2"}, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER));
+
+  // The value query is still outstanding, so the event is the only value param1 has.
+  auto event = parameter_event("/valued");
+  event.changed_parameters.push_back(integer_parameter("param1", 7));
+  graphmon_->on_parameter_event(event);
+
+  blocking->answer_values("/valued", indexed_values({"param1", "param2"}));
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && msg.nodes.front().parameter_values.size() == 2;
+    },
+    kGenerousWait,
+    "Timed out waiting for the read values to be published");
+  EXPECT_THAT(integer_values(msg.nodes.front().parameter_values), testing::ElementsAre(7, 1))
+    << "A value response overwrote a value an event had set";
+}
+
+TEST_F(GraphMonitorTest, a_new_parameter_event_adds_the_parameter)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"growing"});
+  answer_full_observation(blocking, "/growing", {"param1"});
+  await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return fully_observed(msg, 1); },
+    kGenerousWait,
+    "Timed out waiting for the initial observation");
+
+  auto event = parameter_event("/growing");
+  event.new_parameters.push_back(integer_parameter("param2", 9));
+  graphmon_->on_parameter_event(event);
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
+    },
+    kGenerousWait,
+    "Timed out waiting for the new parameter to be published");
+  const auto & node = msg.nodes.front();
+  EXPECT_THAT(descriptor_names(node.parameters), testing::ElementsAre("param1", "param2"));
+  EXPECT_TRUE(all_typed(node.parameters, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER))
+    << "The added parameter was not typed from the event's value";
+  ASSERT_EQ(node.parameter_values.size(), node.parameters.size());
+  EXPECT_THAT(integer_values(node.parameter_values), testing::ElementsAre(0, 9));
+}
+
+TEST_F(GraphMonitorTest, a_deleted_parameter_event_removes_the_parameter)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"shrinking"});
+  answer_full_observation(blocking, "/shrinking", {"param1", "param2"});
+  await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return fully_observed(msg, 2); },
+    kGenerousWait,
+    "Timed out waiting for the initial observation");
+
+  rcl_interfaces::msg::Parameter deleted;
+  deleted.name = "param1";
+  auto event = parameter_event("/shrinking");
+  event.deleted_parameters.push_back(deleted);
+  graphmon_->on_parameter_event(event);
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 1;
+    },
+    kGenerousWait,
+    "Timed out waiting for the deleted parameter to disappear");
+  const auto & node = msg.nodes.front();
+  EXPECT_THAT(descriptor_names(node.parameters), testing::ElementsAre("param2"));
+  ASSERT_EQ(node.parameter_values.size(), node.parameters.size());
+  EXPECT_THAT(integer_values(node.parameter_values), testing::ElementsAre(1));
+}
+
+TEST_F(GraphMonitorTest, an_event_before_the_names_arrive_is_dropped)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"pending"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/pending") == 1; }));
+
+  drain_until_quiet();
+  auto event = parameter_event("/pending");
+  event.changed_parameters.push_back(integer_parameter("param1", 7));
+  graphmon_->on_parameter_event(event);
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "An event arriving before the names changed the graph";
+
+  answer_full_observation(blocking, "/pending", {"param1"});
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return fully_observed(msg, 1); },
+    kGenerousWait,
+    "Timed out waiting for the observation that follows the dropped event");
+  EXPECT_THAT(integer_values(msg.nodes.front().parameter_values), testing::ElementsAre(0))
+    << "A dropped event's value outlived the node's initial observation";
+}
+
+TEST_F(GraphMonitorTest, an_event_for_an_untracked_node_is_dropped)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"tracked"});
+  answer_full_observation(blocking, "/tracked", {"param1"});
+  await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return fully_observed(msg, 1); },
+    kGenerousWait,
+    "Timed out waiting for the initial observation");
+
+  drain_until_quiet();
+  auto event = parameter_event("/ghost");
+  event.changed_parameters.push_back(integer_parameter("param1", 7));
+  graphmon_->on_parameter_event(event);
+
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "An event for an untracked node changed the graph";
 }

@@ -16,7 +16,7 @@ from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 from std_msgs.msg import Bool
 
-from rosgraph_monitor_test.test_utils import wait_for_message_sync
+from rosgraph_monitor_test.test_utils import MessageCollector, spin_surviving_destruction
 
 
 @pytest.mark.launch_test
@@ -35,11 +35,9 @@ class TestProcessOutput(unittest.TestCase):
         # Initialize the ROS context for the test node
         rclpy.init()
         self.publisher_node = rclpy.create_node('publisher_node')
-        self.subscriber_node = rclpy.create_node('subscriber_node')
 
         self.executor = rclpy.executors.MultiThreadedExecutor()
         self.executor.add_node(self.publisher_node)
-        self.executor.add_node(self.subscriber_node)
 
         # Configure QoS based on RMW implementation
         if os.environ.get('RMW_IMPLEMENTATION_WRAPPER') == 'rmw_stats_shim':
@@ -51,7 +49,7 @@ class TestProcessOutput(unittest.TestCase):
         self.dummy_publisher = self.publisher_node.create_publisher(Bool, '/bool_publisher', qos)
         self.publish_timer = self.publisher_node.create_timer(timer_period_sec=0.1, callback=self.publisher_callback)
 
-        self.spin_thread = threading.Thread(target=self.executor.spin)
+        self.spin_thread = threading.Thread(target=spin_surviving_destruction, args=(self.executor,))
         self.spin_thread.start()
 
     def publisher_callback(self):
@@ -63,7 +61,6 @@ class TestProcessOutput(unittest.TestCase):
         # Shutdown the ROS context
         self.executor.shutdown()
         self.spin_thread.join()
-        self.subscriber_node.destroy_node()
         self.publisher_node.destroy_node()
         rclpy.shutdown()
 
@@ -72,9 +69,10 @@ class TestProcessOutput(unittest.TestCase):
         def diagnostic_condition(msg):
             return len(msg.status) > 0 and all(status.level == DiagnosticStatus.OK for status in msg.status)
 
-        success, messages = wait_for_message_sync(
-            self.subscriber_node, DiagnosticArray, '/diagnostics_agg', diagnostic_condition, timeout_sec=5.0
-        )
+        # The aggregator publishes periodically rather than on change,
+        # so this test does not need to arm the collector ahead of an action.
+        with MessageCollector(DiagnosticArray, '/diagnostics_agg') as collector:
+            success, messages = collector.wait_until(diagnostic_condition, timeout_sec=5.0)
 
         self.assertTrue(
             success,

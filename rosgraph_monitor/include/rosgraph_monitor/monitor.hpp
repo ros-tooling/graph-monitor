@@ -58,6 +58,13 @@ namespace rosgraph_monitor
 std::string gid_to_str(const uint8_t gid[RMW_GID_STORAGE_SIZE]);
 std::string gid_to_str(const RosRmwGid & gid);
 
+/// @brief Bring a set of recorded descriptors in line with a freshly observed list of names.
+/// @return One descriptor per observed name, in the observed order.
+/// A name already among `recorded` keeps its recorded descriptor, a new name gets a NOT_SET
+/// descriptor, and a recorded name absent from `names` is dropped.
+std::vector<rcl_interfaces::msg::ParameterDescriptor> reconcile_descriptors(
+  const std::vector<rcl_interfaces::msg::ParameterDescriptor> & recorded, const std::vector<std::string> & names);
+
 struct GraphMonitorConfiguration
 {
   std::string diagnostic_namespace{"rosgraph"};
@@ -268,6 +275,15 @@ protected:
   /// @note Runs on the query queue's thread
   void on_node_parameters(const std::string & node_name, std::vector<std::string> parameter_names);
 
+  /// @brief Read the parameter names recorded for a node, taking the graph lock
+  /// @return The recorded names, empty if the node is untracked or not yet observed
+  std::vector<std::string> recorded_parameter_names(const std::string & node_name);
+
+  /// @brief Record a node's observed parameter descriptors
+  /// @note Runs on the query queue's thread
+  void on_node_descriptors(
+    const std::string & node_name, std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors);
+
   /// @brief Invoke the graph change callback, if one is set.
   void notify_graph_change();
 
@@ -298,6 +314,8 @@ protected:
   GraphChangeCallback graph_change_callback_;
 
   // Declared last so queries stop before anything they touch is destroyed.
+  // The names queue requests on the descriptor queue, so it is declared after it and stops first.
+  QueryQueue<std::vector<rcl_interfaces::msg::ParameterDescriptor>> descriptor_queries_;
   QueryQueue<std::vector<std::string>> param_queries_;
 };
 

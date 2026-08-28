@@ -10,7 +10,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.substitutions import PathSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
-from rcl_interfaces.msg import ParameterDescriptor
+from rcl_interfaces.msg import ParameterType
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile
 from rosgraph_msgs.msg import Graph
@@ -193,23 +193,18 @@ class TestProcessOutput(unittest.TestCase):
             if not updated_node:
                 return False
 
-            if not len(updated_node.parameters) > 0:
+            declared = {param.name: param for param in updated_node.parameters if param.name in params}
+            if len(declared) != len(params):
                 return False
 
-            def filter_params(param):
-                return param.name != 'use_sim_time' and param.name != 'start_type_description_service'
+            # The monitor publishes the names before it has described their types, so keep waiting.
+            if any(param.type == ParameterType.PARAMETER_NOT_SET for param in declared.values()):
+                return False
 
-            # Assert on the parameters
-            self.assertCountEqual(
-                list(filter(filter_params, updated_node.parameters)),
-                [
-                    ParameterDescriptor(
-                        name='param1',
-                    ),
-                    ParameterDescriptor(
-                        name='param2',
-                    ),
-                ],
+            self.assertEqual(declared['param1'].type, ParameterType.PARAMETER_STRING, 'param1 should be a string.')
+            self.assertEqual(declared['param2'].type, ParameterType.PARAMETER_INTEGER, 'param2 should be an integer.')
+            self.assertEqual(
+                len(updated_node.parameter_values), 0, 'parameter_values should be empty until values are read.'
             )
             return True
 

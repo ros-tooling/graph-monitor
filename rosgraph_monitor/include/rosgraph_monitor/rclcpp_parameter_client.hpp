@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "rclcpp/node_interfaces/node_base_interface.hpp"
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
@@ -35,6 +36,8 @@ public:
 
   bool is_ready(const std::string & node_name) override;
   void list_parameters(const std::string & node_name, NamesCallback callback) override;
+  void describe_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback) override;
   void forget(const std::string & node_name) override;
 
 private:

@@ -84,6 +84,21 @@ TEST_F(InvalidContextClient, DescribeParametersCallsBackOnceWithNullopt)
   EXPECT_EQ(result, std::nullopt);
 }
 
+TEST_F(InvalidContextClient, GetParametersCallsBackOnceWithNullopt)
+{
+  using Values = std::vector<rcl_interfaces::msg::ParameterValue>;
+
+  int calls = 0;
+  std::optional<Values> result{Values{}};
+  client_->get_parameters("/some_node", {"a", "b"}, [&](std::optional<Values> values) {
+    ++calls;
+    result = std::move(values);
+  });
+
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(result, std::nullopt);
+}
+
 TEST_F(InvalidContextClient, ForgetDoesNotThrow)
 {
   EXPECT_NO_THROW(client_->forget("/some_node"));

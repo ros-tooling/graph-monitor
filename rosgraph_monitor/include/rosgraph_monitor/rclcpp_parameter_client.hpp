@@ -38,6 +38,8 @@ public:
   void list_parameters(const std::string & node_name, NamesCallback callback) override;
   void describe_parameters(
     const std::string & node_name, const std::vector<std::string> & names, DescriptorsCallback callback) override;
+  void get_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, ValuesCallback callback) override;
   void forget(const std::string & node_name) override;
 
 private:

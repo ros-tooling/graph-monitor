@@ -230,6 +230,31 @@ static std::vector<rcl_interfaces::msg::ParameterDescriptor> descriptors_named(
   return descriptors;
 }
 
+/// @return One integer value per name, each carrying that name's index in `names`.
+static std::vector<rcl_interfaces::msg::ParameterValue> indexed_values(const std::vector<std::string> & names)
+{
+  std::vector<rcl_interfaces::msg::ParameterValue> values;
+  values.reserve(names.size());
+  for (size_t index = 0; index < names.size(); index++) {
+    rcl_interfaces::msg::ParameterValue value;
+    value.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    value.integer_value = static_cast<int64_t>(index);
+    values.push_back(std::move(value));
+  }
+  return values;
+}
+
+/// @return The integer value of each entry, in order.
+static std::vector<int64_t> integer_values(const std::vector<rcl_interfaces::msg::ParameterValue> & values)
+{
+  std::vector<int64_t> integers;
+  integers.reserve(values.size());
+  for (const auto & value : values) {
+    integers.push_back(value.integer_value);
+  }
+  return integers;
+}
+
 /// @return The names of each descriptor, in order.
 static std::vector<std::string> descriptor_names(
   const std::vector<rcl_interfaces::msg::ParameterDescriptor> & descriptors)
@@ -275,6 +300,11 @@ public:
     const std::string &, const std::vector<std::string> & names, DescriptorsCallback callback) override
   {
     callback(descriptors_named(names, described_type));
+  }
+
+  void get_parameters(const std::string &, const std::vector<std::string> & names, ValuesCallback callback) override
+  {
+    callback(indexed_values(names));
   }
 
   void forget(const std::string & node_name) override
@@ -326,6 +356,15 @@ public:
     pending_describes_[node_name] = std::move(callback);
   }
 
+  void get_parameters(
+    const std::string & node_name, const std::vector<std::string> & names, ValuesCallback callback) override
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    value_starts_[node_name]++;
+    valued_names_[node_name] = names;
+    pending_values_[node_name] = std::move(callback);
+  }
+
   void forget(const std::string & node_name) override
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -360,6 +399,22 @@ public:
   void fail_describe(const std::string & node_name)
   {
     if (auto callback = take_describe(node_name)) {
+      callback(std::nullopt);
+    }
+  }
+
+  /// Delivers `values` as the result of the outstanding value query for `node_name`.
+  void answer_values(const std::string & node_name, std::vector<rcl_interfaces::msg::ParameterValue> values)
+  {
+    if (auto callback = take_values(node_name)) {
+      callback(std::move(values));
+    }
+  }
+
+  /// Reports the outstanding value query for `node_name` as failed.
+  void fail_values(const std::string & node_name)
+  {
+    if (auto callback = take_values(node_name)) {
       callback(std::nullopt);
     }
   }
@@ -406,6 +461,22 @@ public:
     return it == described_names_.end() ? std::vector<std::string>{} : it->second;
   }
 
+  /// @return How many value queries have been started for `node_name`.
+  size_t value_start_count(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = value_starts_.find(node_name);
+    return it == value_starts_.end() ? 0 : it->second;
+  }
+
+  /// @return The names the most recent value query for `node_name` asked about.
+  std::vector<std::string> valued_names(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = valued_names_.find(node_name);
+    return it == valued_names_.end() ? std::vector<std::string>{} : it->second;
+  }
+
   /// @return Whether `node_name` has been forgotten.
   bool forgotten(const std::string & node_name)
   {
@@ -440,12 +511,28 @@ private:
     return callback;
   }
 
+  /// @return The outstanding value query's callback for `node_name`, removing it. Empty if there is none.
+  ValuesCallback take_values(const std::string & node_name)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = pending_values_.find(node_name);
+    if (it == pending_values_.end()) {
+      return ValuesCallback();
+    }
+    ValuesCallback callback = std::move(it->second);
+    pending_values_.erase(it);
+    return callback;
+  }
+
   std::mutex mutex_;
   std::map<std::string, NamesCallback> pending_;
   std::map<std::string, size_t> starts_;
   std::map<std::string, DescriptorsCallback> pending_describes_;
   std::map<std::string, size_t> describe_starts_;
   std::map<std::string, std::vector<std::string>> described_names_;
+  std::map<std::string, ValuesCallback> pending_values_;
+  std::map<std::string, size_t> value_starts_;
+  std::map<std::string, std::vector<std::string>> valued_names_;
   std::set<std::string> forgotten_;
 };
 
@@ -1136,7 +1223,8 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
   auto rosgraph_msg = await_graphmon_msg_until(
     [](const rosgraph_msgs::msg::Graph & msg) {
       return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2 &&
-             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
+             all_typed(msg.nodes.front().parameters, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) &&
+             msg.nodes.front().parameter_values.size() == 2;
     },
     std::chrono::milliseconds(500),
     "Timed out waiting for parameters to be populated");
@@ -1153,11 +1241,13 @@ TEST_F(GraphMonitorTest, rosgraph_query_params_from_one_node)
   }
   EXPECT_THAT(param_names, testing::UnorderedElementsAre("param1", "param2"));
 
-  // Describing gives the types the mock reports, and no values.
+  // Describing gives the types the mock reports, and reading gives one value per named parameter.
   for (const auto & descriptor : node.parameters) {
     EXPECT_EQ(descriptor.type, rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
   }
-  EXPECT_TRUE(node.parameter_values.empty()) << "parameter_values is empty until values are read";
+  ASSERT_EQ(node.parameter_values.size(), node.parameters.size());
+  EXPECT_THAT(integer_values(node.parameter_values), testing::ElementsAre(0, 1))
+    << "The values are not lined up with the parameters they belong to";
 }
 
 TEST_F(GraphMonitorTest, rosgraph_drops_parameter_query_for_a_departed_node)
@@ -1487,4 +1577,115 @@ TEST_F(GraphMonitorTest, no_descriptor_query_for_a_node_with_no_parameters)
   blocking->answer("/bare", {});
   EXPECT_FALSE(wait_for_condition([&blocking]() { return blocking->describe_start_count("/bare") > 0; }, kSettle))
     << "A node with no parameters had its descriptors queried";
+}
+
+TEST_F(GraphMonitorTest, names_receipt_requests_values_and_descriptors_together)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"valued"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/valued") == 1; }));
+
+  // Neither query is answered, so both are outstanding at once.
+  blocking->answer("/valued", {"param1", "param2"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() {
+    return blocking->describe_start_count("/valued") == 1 && blocking->value_start_count("/valued") == 1;
+  }))
+    << "Recording parameter names did not start both a descriptor and a value query";
+  EXPECT_THAT(blocking->valued_names("/valued"), testing::ElementsAre("param1", "param2"));
+}
+
+TEST_F(GraphMonitorTest, value_response_publishes_values_parallel_to_descriptors)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"valued"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/valued") == 1; }));
+  blocking->answer("/valued", {"param1", "param2"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->value_start_count("/valued") == 1; }));
+
+  // The describe is left outstanding, so the descriptors are still the names alone.
+  blocking->answer_values("/valued", indexed_values(blocking->valued_names("/valued")));
+
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && !msg.nodes.front().parameter_values.empty();
+    },
+    kGenerousWait,
+    "Timed out waiting for the read values to be published");
+  const auto & node = msg.nodes.front();
+  EXPECT_THAT(descriptor_names(node.parameters), testing::ElementsAre("param1", "param2"));
+  ASSERT_EQ(node.parameter_values.size(), node.parameters.size());
+  EXPECT_THAT(integer_values(node.parameter_values), testing::ElementsAre(0, 1));
+}
+
+TEST_F(GraphMonitorTest, a_failed_value_query_is_retried)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"flaky_values"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/flaky_values") == 1; }));
+  blocking->answer("/flaky_values", {"param1"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->value_start_count("/flaky_values") == 1; }));
+
+  blocking->fail_values("/flaky_values");
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->value_start_count("/flaky_values") == 2; }))
+    << "A failed value query was not retried";
+
+  blocking->answer_values("/flaky_values", indexed_values({"param1"}));
+  auto msg = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) {
+      return msg.nodes.size() == 1 && !msg.nodes.front().parameter_values.empty();
+    },
+    kGenerousWait,
+    "Timed out waiting for the values from the retried query");
+  EXPECT_THAT(integer_values(msg.nodes.front().parameter_values), testing::ElementsAre(0));
+}
+
+TEST_F(GraphMonitorTest, departure_cancels_value_queries)
+{
+  auto blocking = std::make_shared<BlockingParameterService>();
+  reset_monitor(patient_config(), blocking);
+
+  set_node_names({"leaving"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->start_count("/leaving") == 1; }));
+  blocking->answer("/leaving", {"param1"});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->value_start_count("/leaving") == 1; }));
+
+  set_node_names({});
+  ASSERT_TRUE(wait_for_condition([&blocking]() { return blocking->forgotten("/leaving"); }))
+    << "A departed node's client state was not dropped";
+
+  drain_graphmon_msgs();
+  blocking->answer_values("/leaving", indexed_values({"param1"}));
+  EXPECT_FALSE(await_graphmon_msg(kSettle).has_value()) << "A cancelled value query's response was recorded";
+}
+
+TEST(AlignValues, a_reordered_response_is_lined_up_by_name)
+{
+  using rcl_interfaces::msg::ParameterType;
+  const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+
+  const auto aligned =
+    rosgraph_monitor::align_values(descriptors, {{"param2", "param1"}, indexed_values({"param2", "param1"})});
+
+  ASSERT_TRUE(aligned.has_value());
+  EXPECT_THAT(integer_values(*aligned), testing::ElementsAre(1, 0));
+}
+
+TEST(AlignValues, values_for_a_stale_name_set_are_not_published)
+{
+  using rcl_interfaces::msg::ParameterType;
+  // A name set that changes between the request and the response is not reachable through the
+  // monitor's public behavior: names are queried once per successful observation, and departure,
+  // the only thing that drops an observation, cancels the value query too.
+  // The alignment is tested at its own interface instead.
+  const auto descriptors = descriptors_named({"param1", "param2"}, ParameterType::PARAMETER_INTEGER);
+
+  const auto aligned = rosgraph_monitor::align_values(descriptors, {{"param1"}, indexed_values({"param1"})});
+
+  EXPECT_FALSE(aligned.has_value()) << "A recorded name with no value still produced a values array";
 }

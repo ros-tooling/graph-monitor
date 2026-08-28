@@ -74,7 +74,7 @@ class TestProcessOutput(unittest.TestCase):
 
         # The aggregator publishes periodically rather than on change,
         # so this test does not need to arm the collector ahead of an action.
-        with MessageCollector(self.subscriber_node, DiagnosticArray, '/diagnostics_agg') as collector:
+        with MessageCollector(self.subscriber_node, self.executor, DiagnosticArray, '/diagnostics_agg') as collector:
             success, messages = collector.wait_until(diagnostic_condition, timeout_sec=5.0)
 
         self.assertTrue(

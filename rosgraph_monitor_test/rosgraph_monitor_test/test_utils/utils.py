@@ -64,25 +64,27 @@ class MessageCollector:
 
     Example
     -------
-        with MessageCollector(node, Graph, '/rosgraph') as collector:
+        with MessageCollector(node, executor, Graph, '/rosgraph') as collector:
             collector.wait_for_any()
             do_something_that_changes_the_graph()
             success, messages = collector.wait_until(lambda msg: len(msg.nodes) > 3)
 
     """
 
-    def __init__(self, node, message_type, topic, qos_depth=10):
+    def __init__(self, node, executor, message_type, topic, qos_depth=10):
         """
         Configure a collector without subscribing.
 
         Args:
             node: ROS 2 node that a caller-owned executor is already spinning
+            executor: The executor spinning the node, woken when the subscription set changes
             message_type: The message type to subscribe to
             topic: Topic name to listen on
             qos_depth: Subscription queue depth, deep enough to hold a burst of messages
 
         """
         self._node = node
+        self._executor = executor
         self._message_type = message_type
         self._topic = topic
         self._qos_depth = qos_depth
@@ -101,11 +103,14 @@ class MessageCollector:
             self._collect,
             self._qos_depth,
         )
+        # Waking the executor makes it rebuild its wait set, so it notices the new subscription immediately.
+        self._executor.wake()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Destroy the subscription and stop collecting."""
         self._node.destroy_subscription(self._subscription)
+        self._executor.wake()
         self._subscription = None
         return False
 

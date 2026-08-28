@@ -109,7 +109,7 @@ class TestProcessOutput(unittest.TestCase):
             Context manager yielding a MessageCollector
 
         """
-        with MessageCollector(self.subscriber_node, Graph, '/rosgraph') as collector:
+        with MessageCollector(self.subscriber_node, self.executor, Graph, '/rosgraph') as collector:
             self.assertTrue(
                 collector.wait_for_any(timeout_sec=5.0),
                 'Should have received a /rosgraph message in response to subscribing.',

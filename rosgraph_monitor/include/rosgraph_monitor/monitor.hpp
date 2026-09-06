@@ -167,6 +167,11 @@ public:
   /// @return Const reference to configuration
   const GraphMonitorConfiguration & config() const;
 
+  /// @brief Replace the configuration and rebuild all graph-derived state.
+  /// @details Parameter observation settings are read once at construction and
+  /// are therefore preserved by this method.
+  void set_config(GraphMonitorConfiguration config);
+
   /// @brief Integrate new topic statistics input to determine if topics are meeting contracts.
   /// @param statistics Incoming statistics list
   void on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & statistics);
@@ -243,6 +248,8 @@ protected:
     std::unordered_set<std::string> returned_nodes;
     std::unordered_set<std::string> pubs_with_no_subs;  // a.k.a. "leaf topics"
     std::unordered_set<std::string> subs_with_no_pubs;  // a.k.a. "dead sinks"
+
+    void clear();
   };
 
   /* Methods */

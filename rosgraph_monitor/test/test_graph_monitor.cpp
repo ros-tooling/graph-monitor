@@ -885,6 +885,37 @@ TEST_F(GraphMonitorTest, ignore_nodes)
   CHECK_STATUS("not_ignore went down", name, ERROR);
 }
 
+TEST_F(GraphMonitorTest, set_config_rebuilds_graph_tracking)
+{
+  set_node_names({"observed"});
+  add_pub("/unmatched", "type", "observed");
+  trigger_and_wait();
+  CHECK_STATUS("Unmatched publisher is initially reported", continuity_diagnostic, WARN);
+
+  auto config = graphmon_->config();
+  config.nodes.ignore_prefixes = {"/observed"};
+  graphmon_->set_config(config);
+
+  CHECK_STATUS("New ignore prefix removes stale node state", nodes_diagnostic, OK);
+  CHECK_STATUS("New ignore prefix removes stale endpoint state", continuity_diagnostic, OK);
+  const auto ignored_graph = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.empty(); },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the reconfigured graph to remove the ignored node");
+  EXPECT_TRUE(ignored_graph.nodes.empty());
+
+  config.nodes.ignore_prefixes.clear();
+  graphmon_->set_config(config);
+
+  CHECK_STATUS("Removing ignore prefix tracks the publisher again", continuity_diagnostic, WARN);
+  const auto restored_graph = await_graphmon_msg_until(
+    [](const rosgraph_msgs::msg::Graph & msg) { return msg.nodes.size() == 1; },
+    std::chrono::milliseconds(500),
+    "Timed out waiting for the reconfigured graph to restore the node");
+  ASSERT_EQ(restored_graph.nodes.size(), 1);
+  EXPECT_EQ(restored_graph.nodes.front().name, "/observed");
+}
+
 TEST_F(GraphMonitorTest, warn_nodes)
 {
   const auto & name = nodes_diagnostic;

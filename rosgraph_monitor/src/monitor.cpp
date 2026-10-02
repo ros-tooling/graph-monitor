@@ -164,6 +164,20 @@ RosGraphMonitor::EndpointTracking::EndpointTracking(
 , last_stats_timestamp(now)
 {}
 
+void RosGraphMonitor::GraphTracking::clear()
+{
+  nodes.clear();
+  publishers.clear();
+  subscriptions.clear();
+  publisher_lookup.clear();
+  subscription_lookup.clear();
+  topic_endpoint_counts.clear();
+  ignored_nodes.clear();
+  returned_nodes.clear();
+  pubs_with_no_subs.clear();
+  subs_with_no_pubs.clear();
+}
+
 rosgraph_msgs::msg::Topic RosGraphMonitor::EndpointTracking::to_msg()
 {
   rosgraph_msgs::msg::Topic topic_msg;
@@ -683,6 +697,19 @@ GraphMonitorConfiguration & RosGraphMonitor::config()
 const GraphMonitorConfiguration & RosGraphMonitor::config() const
 {
   return config_;
+}
+
+void RosGraphMonitor::set_config(GraphMonitorConfiguration config)
+{
+  {
+    auto graph = graph_.lock();
+    config.parameters = config_.parameters;
+    config_ = std::move(config);
+    graph->clear();
+  }
+
+  update_graph();
+  update_event_.set();
 }
 
 void RosGraphMonitor::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & msg)

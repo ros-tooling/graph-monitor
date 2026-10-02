@@ -75,7 +75,7 @@ Node::Node(const rclcpp::NodeOptions & options)
 void Node::update_params(const rosgraph_monitor::Params & params)
 {
   params_ = params;
-  graph_monitor_.config() = create_graph_monitor_config(params_);
+  graph_monitor_.set_config(create_graph_monitor_config(params_));
 }
 
 void Node::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics::SharedPtr msg)

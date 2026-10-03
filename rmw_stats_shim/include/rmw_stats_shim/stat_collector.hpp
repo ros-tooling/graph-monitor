@@ -1,106 +1,32 @@
 // SPDX-FileCopyrightText: 2024 Bonsai Robotics, Inc.
+// SPDX-FileCopyrightText: 2026 Polymath Robotics, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #ifndef RMW_STATS_SHIM__STAT_COLLECTOR_HPP_
 #define RMW_STATS_SHIM__STAT_COLLECTOR_HPP_
 
-#include <atomic>
-#include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "rcpputils/shared_library.hpp"
 #include "rmw/rmw.h"
-#include "rmw_stats_shim/rolling_mean_accumulator.hpp"
+#include "rmw_stats_shim/handle_map.hpp"
+#include "rmw_stats_shim/rmw_publisher_sink.hpp"
 #include "rmw_stats_shim/timer.hpp"
-#include "rosgraph_monitor_msgs/msg/topic_statistics.hpp"
-
-typedef std::chrono::steady_clock MonoClock;
-typedef std::chrono::system_clock SysClock;
-
-typedef std::chrono::time_point<MonoClock> MonoTime;
-typedef std::chrono::time_point<SysClock> SysTime;
+#include "topic_stats_core/collector.hpp"
+#include "topic_stats_core/types.hpp"
 
 namespace rmw_stats_shim
 {
 
-enum class EndpointType
-{
-  Publisher,
-  Subscription
-};
-
-/**
- * @brief Rolling window statistics for a single topic endpoint (Publisher, Subscription).
- * Default statistic is "Period", that is the time between samples.
- * But this also provides another set of APIs for "Age", which is only relevant for subscriptions and is one
- * measure of latency.
- */
-class EndpointStatistics
-{
-public:
-  EndpointStatistics(EndpointType stat_type, const char * topic_name, const rmw_node_t * node, size_t window_size);
-  virtual ~EndpointStatistics() = default;
-
-  void onMessage(MonoTime ts);
-  /// @brief Checks and clears new data flag
-  /// @return Whether any new messages have been added since last call
-  bool checkNewData();
-  rosgraph_monitor_msgs::msg::TopicStatistic periodMsg();
-
-  void onAge(std::chrono::nanoseconds age);
-  /// @brief Checks and clears new data flag
-  /// @return Whether any new messages have been added since last call
-  bool checkNewAgeData();
-  rosgraph_monitor_msgs::msg::TopicStatistic ageMsg();
-
-  const rmw_node_t * const node_;
-
-protected:
-  std::atomic<bool> new_age_data_ = false;
-  std::atomic<bool> new_data_ = false;
-  EndpointType type_;
-  std::string topic_name_;
-  std::string node_name_;
-  RollingMeanAccumulator<std::chrono::nanoseconds> period_acc_;
-  RollingMeanAccumulator<std::chrono::nanoseconds> age_acc_;
-  std::optional<MonoTime> last_ts_;
-};
-
-/**
- * @brief Create and manage a TopicStatistics publisher for one Node.
- */
-class StatPublisher
-{
-public:
-  StatPublisher(rcpputils::SharedLibrary * rmw_impl, rmw_node_t * node, std::string & stats_topic_name);
-  virtual ~StatPublisher();
-  void publish(rosgraph_monitor_msgs::msg::TopicStatistics & msg) const;
-
-  rmw_publisher_t * pub_;
-  rmw_node_t * node_;
-
-protected:
-  rmw_publisher_options_t pub_opts_;
-
-  decltype(rmw_create_publisher) * create_publisher_;
-  decltype(rmw_destroy_publisher) * destroy_publisher_;
-  decltype(rmw_publish) * publish_;
-};
-
-/**
- * @brief RMW Topic Statistics Collector singleton class, for an entire process.
- * Receives intercepted RMW-API calls,
- * calculates statistics about endpoints,
- * and publishes them periodically.
- */
+/// RMW ingest adapter, one per process.
+///
+/// Translates intercepted RMW API calls into topic_stats_core::Recorder calls, and owns the
+/// reporting cadence and the egress adapter. It computes no statistics itself: everything below
+/// the handle mapping lives in topic_stats_core, so that the tracepoint-based ingest can share it.
 class StatCollector
 {
-private:
-  StatCollector();
-
 public:
   StatCollector(StatCollector const &) = delete;
   void operator=(StatCollector const &) = delete;
@@ -122,16 +48,32 @@ public:
   void publishStatistics();
 
 private:
+  StatCollector();
+
+  /// What an endpoint handle maps to. The owning node is kept so that destroying a node can drop
+  /// its endpoints from this map, which RMW teardown order does not otherwise guarantee.
+  struct EndpointEntry
+  {
+    topic_stats_core::NodeId node;
+    topic_stats_core::EndpointId endpoint;
+  };
+
+  /// Registers an endpoint of either kind. Returns quietly if the node is not tracked, which is
+  /// the case for entities created before rmw_init reached the shim.
+  void addEndpoint(
+    const void * handle, const rmw_node_t * node, topic_stats_core::EndpointKind kind, const char * topic_name);
+  void removeEndpoint(const void * handle);
+
   std::string stats_pub_topic_name_;
   std::chrono::milliseconds pub_period_;
-  size_t window_size_;
 
-  rcpputils::SharedLibrary * rmw_implementation_lib_ = nullptr;
-  std::unordered_set<const rmw_publisher_t *> stat_publishers_;
-  std::unordered_map<const rmw_publisher_t *, EndpointStatistics> publishers_;
-  std::unordered_map<const rmw_subscription_t *, EndpointStatistics> subscriptions_;
-  std::optional<rmw_stats_shim::Timer> timer_;
-  std::unordered_map<const rmw_node_t *, StatPublisher> nodes_;
+  std::shared_ptr<topic_stats_core::Collector> collector_;
+  RmwPublisherSink sink_;
+
+  HandleMap<topic_stats_core::NodeId> nodes_;
+  HandleMap<EndpointEntry> endpoints_;
+
+  std::optional<Timer> timer_;
 };
 
 }  // namespace rmw_stats_shim

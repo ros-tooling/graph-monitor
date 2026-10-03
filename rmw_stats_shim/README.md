@@ -10,6 +10,26 @@ This component
   * This is the different between publish system timestamp and the time at which `rmw_take` is called, so is the sum of network latency plus executor latency
 * Creates a `/topic_statistics` Publisher for every Node and publishes to it periodically about the statistics from within the node
 
+## Structure
+
+The statistics themselves live in `topic_stats_core`, which has no ROS dependencies. This package is
+the RMW-specific half, split along the two boundaries that package defines:
+
+* `stat_collector.*` is the ingest adapter. It translates intercepted RMW calls into
+  `topic_stats_core::Recorder` calls and owns nothing but the mapping from RMW handles to core ids.
+* `handle_map.hpp` is that mapping. RMW entities are created and destroyed on arbitrary threads
+  while messages flow on others, so it is synchronized, and it is testable without a middleware.
+* `rmw_publisher_sink.*` is the egress adapter, a `topic_stats_core::StatsSink` that gives each node
+  a `/topic_statistics` publisher created directly against the RMW implementation. Creating and
+  destroying those publishers emits graph events that re-enter this shim, so their lifetime is
+  managed with no lock of this package held.
+* `stats_message.*` converts a core snapshot into `rosgraph_monitor_msgs`. Kept separate from
+  publishing so it can be tested on its own.
+
+A second ingest adapter based on the `ros_trace_*` functions that `rcl` and the RMW implementations
+already call is the reason for the split: it can share everything below `Recorder` without needing a
+patched `rmw_implementation`.
+
 Key points:
 * Requires no subscriptions, no extra copies, to do statistics on all topics
 * Requires no modification to application code to use

@@ -2,8 +2,8 @@
 Changelog for package rosgraph_monitor_test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.3.0 (2026-10-07)
+------------------
 * feat: subscribe /parameter_events to get updated parameter info (`#72 <https://github.com/ros-tooling/graph-monitor/issues/72>`_)
 * feat: fetch initial parameter values alongside descriptors (`#71 <https://github.com/ros-tooling/graph-monitor/issues/71>`_)
 * fix: flaky launch tests with more robust message collector utility (`#67 <https://github.com/ros-tooling/graph-monitor/issues/67>`_)

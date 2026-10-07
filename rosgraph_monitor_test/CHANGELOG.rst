@@ -2,6 +2,17 @@
 Changelog for package rosgraph_monitor_test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* feat: subscribe /parameter_events to get updated parameter info (`#72 <https://github.com/ros-tooling/graph-monitor/issues/72>`_)
+* feat: fetch initial parameter values alongside descriptors (`#71 <https://github.com/ros-tooling/graph-monitor/issues/71>`_)
+* fix: flaky launch tests with more robust message collector utility (`#67 <https://github.com/ros-tooling/graph-monitor/issues/67>`_)
+* feat: fetch parameter descriptors after names arrive (`#66 <https://github.com/ros-tooling/graph-monitor/issues/66>`_)
+* fix: lyrical+rolling tests (`#57 <https://github.com/ros-tooling/graph-monitor/issues/57>`_)
+* feat!: migrate to new rosgraph_msgs for reporting graph structure (`#54 <https://github.com/ros-tooling/graph-monitor/issues/54>`_)
+* lint: Move from ament linters to polymath_code_standard autoformatters (`#53 <https://github.com/ros-tooling/graph-monitor/issues/53>`_)
+* Contributors: Emerson Knapp
+
 0.2.3 (2025-10-22)
 ------------------
 * Fix circular dependency (`#38 <https://github.com/ros-tooling/graph-monitor/issues/38>`_)

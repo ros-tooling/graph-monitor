@@ -2,6 +2,15 @@
 Changelog for package rosgraph_monitor_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* fix: lyrical+rolling tests (`#57 <https://github.com/ros-tooling/graph-monitor/issues/57>`_)
+* feat!: migrate to new rosgraph_msgs for reporting graph structure (`#54 <https://github.com/ros-tooling/graph-monitor/issues/54>`_)
+* lint: Move from ament linters to polymath_code_standard autoformatters (`#53 <https://github.com/ros-tooling/graph-monitor/issues/53>`_)
+* Add documentation skeleton for all released packages (`#44 <https://github.com/ros-tooling/graph-monitor/issues/44>`_)
+* Update READMEs (`#43 <https://github.com/ros-tooling/graph-monitor/issues/43>`_)
+* Contributors: Emerson Knapp, shrujan
+
 0.2.3 (2025-10-22)
 ------------------
 * Fix circular dependency (`#38 <https://github.com/ros-tooling/graph-monitor/issues/38>`_)

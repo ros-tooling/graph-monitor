@@ -2,6 +2,29 @@
 Changelog for package rosgraph_monitor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* feat: subscribe /parameter_events to get updated parameter info (`#72 <https://github.com/ros-tooling/graph-monitor/issues/72>`_)
+* Rebuild graph state after dynamic configuration changes (`#73 <https://github.com/ros-tooling/graph-monitor/issues/73>`_)
+* feat: fetch initial parameter values alongside descriptors (`#71 <https://github.com/ros-tooling/graph-monitor/issues/71>`_)
+* fix: error handling in parameter client callbacks (`#68 <https://github.com/ros-tooling/graph-monitor/issues/68>`_)
+* fix: retry first parameter queries faster, with backoff (`#69 <https://github.com/ros-tooling/graph-monitor/issues/69>`_)
+* feat: fetch parameter descriptors after names arrive (`#66 <https://github.com/ros-tooling/graph-monitor/issues/66>`_)
+* refactor: pull out parameter collection into a dedicated component (`#61 <https://github.com/ros-tooling/graph-monitor/issues/61>`_)
+* fix: Event and MutexProtected minor issues (`#65 <https://github.com/ros-tooling/graph-monitor/issues/65>`_)
+* refactor: ParameterServiceClient interface instead of async query_params_func (`#64 <https://github.com/ros-tooling/graph-monitor/issues/64>`_)
+* feat: track whole node repr and departed nodes in update (`#63 <https://github.com/ros-tooling/graph-monitor/issues/63>`_)
+* ci: add tsan build - fix race condition issues (`#58 <https://github.com/ros-tooling/graph-monitor/issues/58>`_)
+* fix: lyrical+rolling tests (`#57 <https://github.com/ros-tooling/graph-monitor/issues/57>`_)
+* feat!: migrate to new rosgraph_msgs for reporting graph structure (`#54 <https://github.com/ros-tooling/graph-monitor/issues/54>`_)
+* lint: Move from ament linters to polymath_code_standard autoformatters (`#53 <https://github.com/ros-tooling/graph-monitor/issues/53>`_)
+* Include <cstring> (`#51 <https://github.com/ros-tooling/graph-monitor/issues/51>`_)
+* Add new methods added to graph interface in Rolling (`#48 <https://github.com/ros-tooling/graph-monitor/issues/48>`_)
+* Add documentation skeleton for all released packages (`#44 <https://github.com/ros-tooling/graph-monitor/issues/44>`_)
+* Update READMEs (`#43 <https://github.com/ros-tooling/graph-monitor/issues/43>`_)
+* Use ros_environment to detect distro instead of ament_cmake version (`#39 <https://github.com/ros-tooling/graph-monitor/issues/39>`_)
+* Contributors: Emerson Knapp, Michal Sojka, Parth Oza, shrujan
+
 0.2.3 (2025-10-22)
 ------------------
 

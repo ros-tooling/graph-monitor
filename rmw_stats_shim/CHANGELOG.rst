@@ -3,11 +3,15 @@ Changelog for package rmw_stats_shim
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Forthcoming
 -----------
+* fix: lyrical+rolling tests (`#57 <https://github.com/ros-tooling/graph-monitor/issues/57>`_)
+* lint: Move from ament linters to polymath_code_standard autoformatters (`#53 <https://github.com/ros-tooling/graph-monitor/issues/53>`_)
+* Link rmw_stats_shim against Threads (`#52 <https://github.com/ros-tooling/graph-monitor/issues/52>`_)
+* Fix race condition in StatCollector destructor (`#50 <https://github.com/ros-tooling/graph-monitor/issues/50>`_)
 * Use ros_environment to detect distro instead of ament_cmake version (`#39 <https://github.com/ros-tooling/graph-monitor/pull/39>`_)
 * Add documentation skeleton for all released packages (`#44 <https://github.com/ros-tooling/graph-monitor/pull/44>`_)
 * Add new methods added to graph interface in Rolling (`#48 <https://github.com/ros-tooling/graph-monitor/pull/48>`_)
 * Fix race condition in StatCollector destructor (`#50 <https://github.com/ros-tooling/graph-monitor/pull/50>`_)
-* Contributors: Emerson Knapp, shrujan, Skyler Medeiros
+* Contributors: Emerson Knapp, shrujan, Skyler Medeiros, Tobias Fischer
 
 0.2.3 (2025-10-22)
 ------------------

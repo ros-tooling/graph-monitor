@@ -43,6 +43,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_timer test/test_timer.cpp)
   target_link_libraries(test_timer ${PROJECT_NAME})
+
+  ament_add_gtest(test_stat_collector test/test_stat_collector.cpp)
+  target_link_libraries(test_stat_collector ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

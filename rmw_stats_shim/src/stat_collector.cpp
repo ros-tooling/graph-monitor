@@ -187,30 +187,44 @@ void StatCollector::setRmwImplementation(rcpputils::SharedLibrary * rmw_impl)
 
 void StatCollector::addNode(rmw_node_t * node)
 {
+  std::lock_guard<std::mutex> nodes_lock(nodes_mutex_);
   auto [it, added] = nodes_.try_emplace(node, rmw_implementation_lib_, node, stats_pub_topic_name_);
   if (added) {
+    std::lock_guard<std::mutex> endpoints_lock(endpoints_mutex_);
     stat_publishers_.insert(it->second.pub_);
   }
 }
 
 void StatCollector::removeNode(rmw_node_t * node)
 {
-  nodes_.erase(node);
+  std::lock_guard<std::mutex> nodes_lock(nodes_mutex_);
+  auto it = nodes_.find(node);
+  if (it == nodes_.end()) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> endpoints_lock(endpoints_mutex_);
+    stat_publishers_.erase(it->second.pub_);
+  }
+  nodes_.erase(it);
 }
 
 void StatCollector::addPublisher(rmw_publisher_t * publisher, const rmw_node_t * node)
 {
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   publishers_.try_emplace(publisher, EndpointType::Publisher, publisher->topic_name, node, window_size_);
 }
 
 void StatCollector::removePublisher(rmw_publisher_t * publisher)
 {
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   publishers_.erase(publisher);
 }
 
 void StatCollector::onPublish(const rmw_publisher_t * publisher)
 {
   auto now = MonoClock::now();
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   // Not doing topic statistics on our generated statistic publishers
   if (stat_publishers_.count(publisher)) {
     return;
@@ -227,17 +241,20 @@ void StatCollector::addSubscription(rmw_subscription_t * subscription, const rmw
     // Seems more noisy than it's worth to also report on /topic_statistics
     return;
   }
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   subscriptions_.try_emplace(subscription, EndpointType::Subscription, subscription->topic_name, node, window_size_);
 }
 
 void StatCollector::removeSubscription(rmw_subscription_t * subscription)
 {
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   subscriptions_.erase(subscription);
 }
 
 void StatCollector::onReceive(const rmw_subscription_t * subscription, rmw_message_info_t * message_info)
 {
   auto now = MonoClock::now();
+  std::lock_guard<std::mutex> lock(endpoints_mutex_);
   auto it = subscriptions_.find(subscription);
   if (it != subscriptions_.end()) {
     it->second.onMessage(now);
@@ -252,11 +269,13 @@ void StatCollector::onReceive(const rmw_subscription_t * subscription, rmw_messa
 
 void StatCollector::publishStatistics()
 {
+  std::lock_guard<std::mutex> nodes_lock(nodes_mutex_);
   for (auto & [node_ptr, stat_pub] : nodes_) {
     rosgraph_monitor_msgs::msg::TopicStatistics stats_msg;
     // Publishing as system time, ROS time is just not going to be supported,
     // there are too many moving parts and it's not relevant to our use of this
     stats_msg.timestamp = timeMessage(SysClock::now());
+    std::unique_lock<std::mutex> endpoints_lock(endpoints_mutex_);
     for (auto & [pub_ptr, endpoint_stats] : publishers_) {
       if (stat_pub.node_ == endpoint_stats.node_ && endpoint_stats.checkNewData()) {
         stats_msg.statistics.push_back(endpoint_stats.periodMsg());
@@ -272,6 +291,7 @@ void StatCollector::publishStatistics()
         }
       }
     }
+    endpoints_lock.unlock();
     if (stats_msg.statistics.size()) {
       stat_pub.publish(stats_msg);
     }

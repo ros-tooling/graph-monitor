@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -127,6 +128,14 @@ private:
   size_t window_size_;
 
   rcpputils::SharedLibrary * rmw_implementation_lib_ = nullptr;
+
+  /// Guards nodes_. Lock order: nodes_mutex_ before endpoints_mutex_.
+  /// Creating or destroying a StatPublisher re-enters onPublish on the same thread,
+  /// so endpoints_mutex_ must not be held across it.
+  std::mutex nodes_mutex_;
+  /// Guards stat_publishers_, publishers_, subscriptions_ and the EndpointStatistics they hold.
+  std::mutex endpoints_mutex_;
+
   std::unordered_set<const rmw_publisher_t *> stat_publishers_;
   std::unordered_map<const rmw_publisher_t *, EndpointStatistics> publishers_;
   std::unordered_map<const rmw_subscription_t *, EndpointStatistics> subscriptions_;

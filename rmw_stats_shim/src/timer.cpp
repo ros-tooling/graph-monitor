@@ -40,8 +40,9 @@ void Timer::stop()
 {
   running_ = false;
   cv_.notify_all();
-  thread_.join();
-  thread_ = std::thread{};
+  if (thread_.joinable()) {
+    thread_.join();
+  }
 }
 
 bool Timer::isRunning()

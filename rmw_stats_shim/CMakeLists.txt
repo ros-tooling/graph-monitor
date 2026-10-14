@@ -39,6 +39,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 )
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  ament_add_gtest(test_timer test/test_timer.cpp)
+  target_link_libraries(test_timer ${PROJECT_NAME})
 endif()
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)

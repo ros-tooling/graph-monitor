@@ -4,14 +4,15 @@
 #ifndef RMW_STATS_SHIM__ROLLING_MEAN_ACCUMULATOR_HPP_
 #define RMW_STATS_SHIM__ROLLING_MEAN_ACCUMULATOR_HPP_
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <vector>
 
-/* Copied from rcppmath, but modified to give access to the current window size. */
+/* Copied from rcppmath, but modified to give access to the current window size, minimum and maximum. */
 
 /**
- * \brief Computes the mean of the last accumulated elements.
+ * \brief Computes the mean, minimum and maximum of the last accumulated elements.
  *
  * This is a simplified version of boost's rolling mean accumulator,
  * written to avoid dragging in boost dependencies.
@@ -55,6 +56,28 @@ public:
     size_t valid_data_count = dataCount();
     assert(valid_data_count > 0);
     return sum_ / valid_data_count;
+  }
+
+  /**
+   * Finds the smallest value in the current window.
+   *
+   * \return Minimum of the accumulated values.
+   */
+  T getRollingMin() const
+  {
+    assert(dataCount() > 0);
+    return *std::min_element(buffer_.begin(), buffer_.begin() + dataCount());
+  }
+
+  /**
+   * Finds the largest value in the current window.
+   *
+   * \return Maximum of the accumulated values.
+   */
+  T getRollingMax() const
+  {
+    assert(dataCount() > 0);
+    return *std::max_element(buffer_.begin(), buffer_.begin() + dataCount());
   }
 
   size_t dataCount() const

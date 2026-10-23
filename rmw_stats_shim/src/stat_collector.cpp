@@ -114,6 +114,8 @@ rosgraph_monitor_msgs::msg::TopicStatistic EndpointStatistics::periodMsg()
   msg.topic_name = topic_name_;
   msg.window_count = period_acc_.dataCount();
   msg.mean = durationMessage(period_acc_.getRollingMean());
+  msg.min = durationMessage(period_acc_.getRollingMin());
+  msg.max = durationMessage(period_acc_.getRollingMax());
   return msg;
 }
 
@@ -141,6 +143,8 @@ rosgraph_monitor_msgs::msg::TopicStatistic EndpointStatistics::ageMsg()
   msg.topic_name = topic_name_;
   msg.window_count = age_acc_.dataCount();
   msg.mean = durationMessage(age_acc_.getRollingMean());
+  msg.min = durationMessage(age_acc_.getRollingMin());
+  msg.max = durationMessage(age_acc_.getRollingMax());
   return msg;
 }
 

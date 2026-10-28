@@ -38,6 +38,23 @@ public:
    */
   void accumulate(T val)
   {
+    // A value that ties or beats the tracked minimum/maximum takes its place.
+    // Overwriting the slot that held it with anything else leaves the extreme unknown,
+    // so the next query searches the window again.
+    if (!min_stale_) {
+      if (val <= buffer_[min_index_]) {
+        min_index_ = next_insert_;
+      } else if (min_index_ == next_insert_) {
+        min_stale_ = true;
+      }
+    }
+    if (!max_stale_) {
+      if (val >= buffer_[max_index_]) {
+        max_index_ = next_insert_;
+      } else if (max_index_ == next_insert_) {
+        max_stale_ = true;
+      }
+    }
     sum_ -= buffer_[next_insert_];
     sum_ += val;
     buffer_[next_insert_] = val;
@@ -59,25 +76,39 @@ public:
   }
 
   /**
-   * Finds the smallest value in the current window.
+   * Returns the smallest value in the current window.
+   *
+   * This is O(1) unless the tracked minimum has left the window since the last query,
+   * in which case the window is searched once.
    *
    * \return Minimum of the accumulated values.
    */
   T getRollingMin() const
   {
     assert(dataCount() > 0);
-    return *std::min_element(buffer_.begin(), buffer_.begin() + dataCount());
+    if (min_stale_) {
+      min_index_ = std::min_element(buffer_.begin(), buffer_.begin() + dataCount()) - buffer_.begin();
+      min_stale_ = false;
+    }
+    return buffer_[min_index_];
   }
 
   /**
-   * Finds the largest value in the current window.
+   * Returns the largest value in the current window.
+   *
+   * This is O(1) unless the tracked maximum has left the window since the last query,
+   * in which case the window is searched once.
    *
    * \return Maximum of the accumulated values.
    */
   T getRollingMax() const
   {
     assert(dataCount() > 0);
-    return *std::max_element(buffer_.begin(), buffer_.begin() + dataCount());
+    if (max_stale_) {
+      max_index_ = std::max_element(buffer_.begin(), buffer_.begin() + dataCount()) - buffer_.begin();
+      max_stale_ = false;
+    }
+    return buffer_[max_index_];
   }
 
   size_t dataCount() const
@@ -90,6 +121,12 @@ private:
   size_t next_insert_{0};
   T sum_{0};
   bool buffer_filled_{false};
+  // Indices of the window's minimum and maximum, valid while the matching stale flag is false.
+  // The getters refresh them lazily, so they are mutable.
+  mutable size_t min_index_{0};
+  mutable size_t max_index_{0};
+  mutable bool min_stale_{true};
+  mutable bool max_stale_{true};
 };
 
 #endif  // RMW_STATS_SHIM__ROLLING_MEAN_ACCUMULATOR_HPP__

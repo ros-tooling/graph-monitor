@@ -4,13 +4,17 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "rmw_stats_shim/stat_collector.hpp"
 
+using rmw_stats_shim::EndpointStatistics;
+using rmw_stats_shim::EndpointType;
 using rmw_stats_shim::StatCollector;
+using std::chrono::milliseconds;
 
 namespace
 {
@@ -75,4 +79,30 @@ TEST(StatCollector, ConcurrentSubscriptionChurnAndReceive)
   }
   stats.join();
   SUCCEED();
+}
+
+TEST(EndpointStatistics, MessagesReportWindowMinAndMax)
+{
+  rmw_node_t node = make_node();
+  EndpointStatistics stats(EndpointType::Subscription, "/topic", &node, 10);
+
+  MonoTime t0{};
+  // Periods of 10ms, 20ms and 6ms
+  for (int offset : {0, 10, 30, 36}) {
+    stats.onMessage(t0 + milliseconds{offset});
+  }
+  auto period = stats.periodMsg();
+  EXPECT_EQ(period.window_count, 3);
+  EXPECT_EQ(period.mean.nanosec, 12000000u);
+  EXPECT_EQ(period.min.nanosec, 6000000u);
+  EXPECT_EQ(period.max.nanosec, 20000000u);
+
+  for (int age : {7, 3, 15}) {
+    stats.onAge(milliseconds{age});
+  }
+  auto age = stats.ageMsg();
+  EXPECT_EQ(age.window_count, 3);
+  EXPECT_EQ(age.mean.nanosec, 8333333u);
+  EXPECT_EQ(age.min.nanosec, 3000000u);
+  EXPECT_EQ(age.max.nanosec, 15000000u);
 }
